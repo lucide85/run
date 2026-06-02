@@ -10,6 +10,7 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
   const [days, setDays] = useState<string[]>([]);
   const [maxHr, setMaxHr] = useState(195);
   const [restHr, setRestHr] = useState(50);
+  const [watchModel, setWatchModel] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [gEmail, setGEmail] = useState("");
@@ -22,6 +23,7 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
     setDays(s.training.days);
     setMaxHr(s.training.maxHr);
     setRestHr(s.training.restHr);
+    setWatchModel(s.training.watchModel ?? "");
   }
   useEffect(() => {
     load();
@@ -39,7 +41,7 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
     setSaving(true);
     setMsg("");
     try {
-      const r = await api.updateSettings({ days, maxHr, restHr });
+      const r = await api.updateSettings({ days, maxHr, restHr, watchModel });
       setMsg(r.regenerated ? "Lagret – datoer i programmet er oppdatert." : "Lagret.");
       await load();
     } catch (e) {
@@ -120,6 +122,19 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
             />
           </label>
         </div>
+      </Card>
+
+      <Card className="mb-6">
+        <h3 className="mb-1 font-semibold text-slate-700">Pulsklokke</h3>
+        <p className="mb-3 text-sm text-slate-400">
+          Hvilken klokke bruker du? AI-treneren bruker dette til å gi presise oppsettstips for hver økt.
+        </p>
+        <input
+          value={watchModel}
+          onChange={(e) => setWatchModel(e.target.value)}
+          placeholder="F.eks. Garmin Forerunner 255"
+          className="w-full rounded-xl border border-slate-200 px-3 py-2"
+        />
       </Card>
 
       <Card className="mb-6">

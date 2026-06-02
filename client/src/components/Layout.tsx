@@ -35,11 +35,21 @@ export function Layout({ children, me, onLogout }: { children: ReactNode; me: Me
         </button>
       </header>
 
-      {/* Sidebar / drawer */}
+      {/* Bakteppe når menyen er åpen (mobil) */}
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/30 backdrop-blur-sm lg:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* Sidebar / drawer – overlay på mobil, alltid synlig (sticky) på desktop */}
       <aside
-        className={`${open ? "block" : "hidden"} lg:block lg:w-60 lg:shrink-0 border-r border-slate-200 bg-white`}
+        className={`${
+          open ? "fixed inset-y-0 left-0 z-40 block w-72 shadow-2xl" : "hidden"
+        } overflow-y-auto border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:z-auto lg:block lg:h-screen lg:w-60 lg:shrink-0 lg:shadow-none`}
       >
-        <div className="hidden items-center gap-2 px-6 py-5 text-lg font-bold text-slate-800 lg:flex">
+        <div className="flex items-center gap-2 px-6 py-5 text-lg font-bold text-slate-800">
           <span>🏃</span> {title}
         </div>
         <nav className="flex flex-col gap-1 p-3">

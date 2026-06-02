@@ -6,6 +6,7 @@ import {
   chatAboutWorkout,
   proposePlanAdjustment,
   summarizeWorkout,
+  generateWatchTips,
   type PlanAdjustmentProposal,
 } from "../services/ai.js";
 
@@ -81,6 +82,32 @@ aiRouter.post("/workouts/:id/chat", async (req, res) => {
       data: { workoutId: id, role: "assistant", content: reply, kind: "chat" },
     });
     res.json(msg);
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Pulsklokke-tips for en planlagt økt (caches per økt + klokkemodell)
+aiRouter.post("/sessions/:id/watch-tips", async (req, res) => {
+  const user = await currentUser(req);
+  const id = Number(req.params.id);
+  const force = req.query.force === "true" || req.body?.force === true;
+
+  const session = await prisma.plannedSession.findFirst({ where: { id, userId: user.id } });
+  if (!session) return res.status(404).json({ error: "Ikke funnet" });
+
+  const cacheKey = user.watchModel?.trim() ?? "";
+  if (!force && session.watchTips && session.watchTipsFor === cacheKey) {
+    return res.json({ tips: session.watchTips, cached: true });
+  }
+
+  try {
+    const tips = await generateWatchTips(user, session);
+    await prisma.plannedSession.update({
+      where: { id },
+      data: { watchTips: tips, watchTipsFor: cacheKey },
+    });
+    res.json({ tips, cached: false });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }

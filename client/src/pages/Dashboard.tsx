@@ -83,7 +83,11 @@ export default function Dashboard() {
           ) : (
             <div className="flex flex-col gap-3">
               {upcoming.map((s) => (
-                <div key={s.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                <Link
+                  key={s.id}
+                  to={`/plan/${s.id}`}
+                  className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 transition hover:bg-brand-50/60"
+                >
                   <div>
                     <div className="flex items-center gap-2">
                       <TypeBadge type={s.type} />
@@ -91,8 +95,8 @@ export default function Dashboard() {
                     </div>
                     <div className="mt-1 text-sm font-medium text-slate-700">{s.title}</div>
                   </div>
-                  <span className="text-xs text-slate-400">{s.targetZone}</span>
-                </div>
+                  <span className="text-xs text-slate-400">{s.targetZone} ›</span>
+                </Link>
               ))}
             </div>
           )}

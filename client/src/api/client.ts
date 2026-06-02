@@ -15,6 +15,8 @@ export interface PlannedSession {
   status: "planned" | "completed" | "skipped" | "moved";
   aiAdjusted: boolean;
   notes?: string | null;
+  watchTips?: string | null;
+  watchTipsFor?: string | null;
   workoutId?: number | null;
   workout?: Workout | null;
 }
@@ -61,7 +63,7 @@ export interface WeightLog {
 
 export interface Settings {
   race: { name: string; date: string | null };
-  training: { startDate: string; days: string[]; maxHr: number; restHr: number };
+  training: { startDate: string; days: string[]; maxHr: number; restHr: number; watchModel: string };
   role: "admin" | "user";
   nickname: string;
   garminConnected: boolean;
@@ -199,6 +201,11 @@ export const api = {
   aiMessages: (workoutId: number) => req<AiMessage[]>(`/api/ai/workouts/${workoutId}/messages`),
   chat: (workoutId: number, message: string) =>
     req<AiMessage>(`/api/ai/workouts/${workoutId}/chat`, { method: "POST", body: JSON.stringify({ message }) }),
+  watchTips: (sessionId: number, force = false) =>
+    req<{ tips: string; cached: boolean }>(
+      `/api/ai/sessions/${sessionId}/watch-tips${force ? "?force=true" : ""}`,
+      { method: "POST" }
+    ),
   proposePlan: () => req<PlanProposal>("/api/ai/plan/propose", { method: "POST" }),
   applyPlan: (proposal: PlanProposal) =>
     req<{ ok: true }>("/api/ai/plan/apply", { method: "POST", body: JSON.stringify(proposal) }),

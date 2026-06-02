@@ -27,6 +27,7 @@ model User {
   // Treningsinnstillinger
   maxHr                 Int       @default(195)
   restHr                Int       @default(50)
+  watchModel            String?   // pulsklokke, f.eks. "Garmin Forerunner 255"
   raceName              String?
   raceDate              DateTime?
   trainingDaysJson      String? // JSON: ["Tue","Thu","Sun"]
@@ -61,6 +62,8 @@ model PlannedSession {
   status            String    @default("planned") // planned | completed | skipped | moved
   aiAdjusted        Boolean   @default(false)
   notes             String?
+  watchTips         String?   // AI-genererte pulsklokke-tips (markdown)
+  watchTipsFor      String?   // klokkemodellen tipsene ble generert for (cache-nøkkel)
   workout           Workout?  @relation(fields: [workoutId], references: [id])
   workoutId         Int?      @unique
   createdAt         DateTime  @default(now())

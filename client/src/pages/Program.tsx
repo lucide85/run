@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, PlannedSession, PlanProposal } from "../api/client";
 import { Card, PageTitle, TypeBadge, StatusBadge, Button, Spinner } from "../components/ui";
 import { dateShort, dist, pace } from "../lib/format";
@@ -113,9 +114,10 @@ export default function Program() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {ws.map((s) => (
-                    <div
+                    <Link
                       key={s.id}
-                      className={`rounded-xl border p-3 ${
+                      to={`/plan/${s.id}`}
+                      className={`block rounded-xl border p-3 transition hover:border-brand-300 hover:shadow-sm ${
                         s.aiAdjusted ? "border-brand-200 bg-brand-50/30" : "border-slate-100 bg-slate-50"
                       }`}
                     >
@@ -134,7 +136,7 @@ export default function Program() {
                           🎯 {pace(s.targetPaceMinSec)}–{pace(s.targetPaceMaxSec)} /km
                         </div>
                       )}
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </Card>

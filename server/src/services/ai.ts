@@ -142,6 +142,56 @@ ${summarizeWorkout(workout)}`;
   return textOf(resp);
 }
 
+/** Korte, presise pulsklokke-tips for en planlagt økt. */
+export async function generateWatchTips(user: User, session: PlannedSession): Promise<string> {
+  const fmtPace = (s?: number | null) =>
+    s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} min/km` : null;
+
+  const zones = computeZones(user.maxHr, user.restHr);
+  // Tolk kun sonetall fra teksten FØR en evt. parentes («Sone 2 (137–152)» → [2])
+  const zoneNums = ((session.targetZone ?? "").split("(")[0].match(/\d/g) ?? [])
+    .map(Number)
+    .filter((n) => n >= 1 && n <= 5);
+  const zoneInfo =
+    zoneNums.length > 0
+      ? zones
+          .filter((z) => z.zone >= Math.min(...zoneNums) && z.zone <= Math.max(...zoneNums))
+          .map((z) => `Sone ${z.zone} (${z.name}) = ${z.min}–${z.max} bpm`)
+          .join(", ")
+      : "";
+  const paceRange =
+    fmtPace(session.targetPaceMinSec) && fmtPace(session.targetPaceMaxSec)
+      ? `${fmtPace(session.targetPaceMinSec)}–${fmtPace(session.targetPaceMaxSec)}`
+      : null;
+
+  const watch = user.watchModel?.trim()
+    ? `Brukeren har en ${user.watchModel.trim()} – gi tips spesifikt for den (menyer/funksjoner den faktisk har).`
+    : "Brukeren har ikke oppgitt klokkemodell – gi generelle tips som passer vanlige GPS-pulsklokker.";
+
+  const userText = `Lag korte oppsettstips for pulsklokken til denne planlagte økten.
+
+ØKT (uke ${session.week}, ${session.phaseName}, type "${session.type}"): ${session.title}
+${session.description}
+${session.targetZone ? `Målsone: ${session.targetZone} (${zoneInfo})` : ""}
+${paceRange ? `Måltempo: ${paceRange} /km` : ""}
+${session.plannedDistanceKm ? `Planlagt distanse: ${session.plannedDistanceKm} km` : ""}
+
+${watch}
+
+KRAV TIL SVARET (markdown, norsk):
+- Start med én linje "🎯 Mål:" med pulssone i bpm${paceRange ? " og tempo" : ""} – bruk de EKSAKTE tallene over.
+- Deretter klokkeoppsett: for ENKLE økter (rolig/langtur) maks 2–3 korte punkter (f.eks. pulsvarsel/sonealarm og datafelt). For INTERVALL-/kvalitetsøkter: konkret oppsett av intervall-/treningsøkt-funksjonen (drag, pauser, mål per del) + 2–3 tips for godt utbytte (oppvarming, disponering, vanlige feil).
+- Maks ~120 ord totalt. Ingen innledning eller avslutning.`;
+
+  const resp = await getClient().messages.create({
+    model: model(),
+    max_tokens: 600,
+    system: systemBlocks(user),
+    messages: [{ role: "user", content: userText }],
+  });
+  return textOf(resp);
+}
+
 export interface PlanAdjustmentProposal {
   summary: string;
   changes: {

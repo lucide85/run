@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import CalendarPage from "./pages/CalendarPage";
 import Program from "./pages/Program";
 import WorkoutDetail from "./pages/WorkoutDetail";
+import PlanSessionDetail from "./pages/PlanSessionDetail";
 import Progress from "./pages/Progress";
 import Workouts from "./pages/Workouts";
 import SettingsPage from "./pages/SettingsPage";
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/program" element={<Program />} />
         <Route path="/okter" element={<Workouts />} />
         <Route path="/okter/:id" element={<WorkoutDetail />} />
+        <Route path="/plan/:id" element={<PlanSessionDetail />} />
         <Route path="/progresjon" element={<Progress />} />
         <Route path="/innstillinger" element={<SettingsPage onChange={check} />} />
         <Route path="/onboarding" element={<Onboarding nickname={me?.nickname ?? ""} onDone={check} />} />

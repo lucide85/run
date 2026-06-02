@@ -19,6 +19,7 @@ settingsRouter.get("/", async (req, res) => {
       days: user.trainingDaysJson ? JSON.parse(user.trainingDaysJson) : cfg.training.days,
       maxHr: user.maxHr,
       restHr: user.restHr,
+      watchModel: user.watchModel ?? "",
     },
     role: user.role,
     nickname: user.nickname,
@@ -31,7 +32,7 @@ settingsRouter.get("/", async (req, res) => {
 // Oppdater treningsdager / pulsverdier
 settingsRouter.put("/", async (req, res) => {
   const user = await currentUser(req);
-  const { days, maxHr, restHr } = req.body ?? {};
+  const { days, maxHr, restHr, watchModel } = req.body ?? {};
   const data: Record<string, unknown> = {};
   let regenerate = false;
 
@@ -41,6 +42,7 @@ settingsRouter.put("/", async (req, res) => {
   }
   if (typeof maxHr === "number") data.maxHr = maxHr;
   if (typeof restHr === "number") data.restHr = restHr;
+  if (typeof watchModel === "string") data.watchModel = watchModel.trim() || null;
 
   await prisma.user.update({ where: { id: user.id }, data });
   if (regenerate) await regenerateDates(user.id, days);
