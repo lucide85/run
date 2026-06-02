@@ -4,17 +4,15 @@
 # (typisk /etc/traefik/dynamic/). Traefik plukker den opp automatisk – ingen
 # omstart nødvendig hvis file provider kjører med "watch: true".
 #
-# Bytt ut:
-#   run.dittdomene.no   → ditt faktiske (sub)domene
-#   192.168.1.50        → IP-adressen til APP-VM-en (der containeren kjører)
-#   websecure           → navnet på din HTTPS-entrypoint (sjekk statisk config)
-#   letsencrypt         → navnet på din certificate resolver (sjekk statisk config)
+# Sjekk at disse to stemmer med DIN Traefik (statisk config):
+#   websecure           → navnet på din HTTPS-entrypoint (port 443)
+#   letsencrypt         → navnet på din certificate resolver
 # ─────────────────────────────────────────────────────────────────────────────
 
 http:
   routers:
     treningsapp:
-      rule: "Host(`run.dittdomene.no`)"
+      rule: "Host(`run.vikane.cloud`)"
       entryPoints:
         - websecure
       service: treningsapp-svc
@@ -26,4 +24,4 @@ http:
       loadBalancer:
         passHostHeader: true
         servers:
-          - url: "http://192.168.1.50:3001"
+          - url: "http://192.168.1.25:3001"
