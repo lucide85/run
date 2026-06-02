@@ -1,0 +1,38 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* FullCalendar – lyst, moderne uttrykk */
+.fc {
+  --fc-border-color: #e2e8f0;
+  --fc-today-bg-color: #eff6ff;
+  --fc-page-bg-color: #ffffff;
+}
+.fc .fc-toolbar-title {
+  @apply text-lg font-semibold text-slate-700;
+}
+.fc .fc-button {
+  @apply bg-white border border-slate-200 text-slate-600 shadow-sm capitalize;
+}
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  @apply bg-brand-600 border-brand-600 text-white;
+}
+.fc-event {
+  @apply cursor-pointer border-0 text-xs font-medium;
+}

@@ -1,0 +1,43 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "db:push": "prisma db push --accept-data-loss",
+    "db:studio": "prisma studio",
+    "seed": "tsx src/scripts/seed.ts",
+    "garmin:login": "tsx src/scripts/garminLogin.ts",
+    "sync:test": "tsx src/scripts/testSync.ts",
+    "ai:test": "tsx src/scripts/testAi.ts",
+    "verify:multiuser": "tsx src/scripts/verifyMultiuser.ts",
+    "fix:elevation": "tsx src/scripts/fixElevation.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@prisma/client": "^5.22.0",
+    "adm-zip": "^0.5.16",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "fit-file-parser": "^1.21.0",
+    "garmin-connect": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/express-session": "^1.18.1",
+    "@types/node": "^22.10.5",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

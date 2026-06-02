@@ -1,0 +1,25 @@
+# Avhengigheter installeres i imaget
+node_modules
+**/node_modules
+
+# Bygde artefakter (bygges i imaget)
+server/dist
+client/dist
+**/*.tsbuildinfo
+
+# Lokale data og hemmeligheter – skal ALDRI inn i imaget
+config.json
+server/.garmin-session.json
+server/prisma/data
+**/*.db
+**/*.db-journal
+**/*.sqlite
+
+# Diverse
+.git
+.gitignore
+*.log
+.DS_Store
+.vscode
+.idea
+client/dev-dist

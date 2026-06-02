@@ -1,0 +1,24 @@
+{
+  "name": "treningsapp-10k",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Treningsapp for 10 km-program med Garmin- og Claude-integrasjon",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm -w server run dev",
+    "dev:client": "npm -w client run dev",
+    "build": "npm -w server run build && npm -w client run build",
+    "start": "npm -w server run start",
+    "db:push": "npm -w server run db:push",
+    "seed": "npm -w server run seed",
+    "garmin:login": "npm -w server run garmin:login",
+    "setup": "npm install && npm -w server run db:push && npm -w server run seed"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

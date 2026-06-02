@@ -1,0 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Traefik DYNAMISK config (file provider).
+# Legges på TRAEFIK-VM-EN, i mappa Traefik leser dynamiske filer fra
+# (typisk /etc/traefik/dynamic/). Traefik plukker den opp automatisk – ingen
+# omstart nødvendig hvis file provider kjører med "watch: true".
+#
+# Bytt ut:
+#   run.dittdomene.no   → ditt faktiske (sub)domene
+#   192.168.1.50        → IP-adressen til APP-VM-en (der containeren kjører)
+#   websecure           → navnet på din HTTPS-entrypoint (sjekk statisk config)
+#   letsencrypt         → navnet på din certificate resolver (sjekk statisk config)
+# ─────────────────────────────────────────────────────────────────────────────
+
+http:
+  routers:
+    treningsapp:
+      rule: "Host(`run.dittdomene.no`)"
+      entryPoints:
+        - websecure
+      service: treningsapp-svc
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    treningsapp-svc:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://192.168.1.50:3001"

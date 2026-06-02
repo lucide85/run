@@ -1,0 +1,65 @@
+import { Router } from "express";
+import { prisma } from "../db.js";
+import { currentUserId } from "../auth.js";
+
+export const workoutsRouter = Router();
+
+// Alle økter (uten tunge strøm-data)
+workoutsRouter.get("/", async (req, res) => {
+  const userId = currentUserId(req);
+  const workouts = await prisma.workout.findMany({
+    where: { userId },
+    orderBy: { startTime: "desc" },
+    select: {
+      id: true, garminActivityId: true, startTime: true, sport: true, name: true,
+      distanceKm: true, durationSec: true, avgHr: true, maxHr: true,
+      avgPaceSecPerKm: true, elevationGainM: true, avgCadence: true, calories: true,
+      hrZoneSecondsJson: true, plannedSession: true,
+    },
+  });
+  res.json(workouts);
+});
+
+// Én økt med full detalj (strøm, runder, AI-meldinger)
+workoutsRouter.get("/:id", async (req, res) => {
+  const userId = currentUserId(req);
+  const workout = await prisma.workout.findFirst({
+    where: { id: Number(req.params.id), userId },
+    include: { plannedSession: true, aiMessages: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!workout) return res.status(404).json({ error: "Ikke funnet" });
+
+  res.json({
+    ...workout,
+    streams: workout.streamsJson ? JSON.parse(workout.streamsJson) : [],
+    laps: workout.lapsJson ? JSON.parse(workout.lapsJson) : [],
+    hrZoneSeconds: workout.hrZoneSecondsJson ? JSON.parse(workout.hrZoneSecondsJson) : {},
+  });
+});
+
+// Slett en økt. Som standard ignoreres Garmin-aktiviteten så den ikke synkes inn igjen.
+// Send ?resync=true for å tillate at den hentes på nytt ved neste synk.
+workoutsRouter.delete("/:id", async (req, res) => {
+  const userId = currentUserId(req);
+  const workout = await prisma.workout.findFirst({ where: { id: Number(req.params.id), userId } });
+  if (!workout) return res.status(404).json({ error: "Ikke funnet" });
+
+  const allowResync = req.query.resync === "true";
+
+  // Koble fra en evt. planlagt økt og sett den tilbake til "planlagt"
+  await prisma.plannedSession.updateMany({
+    where: { workoutId: workout.id },
+    data: { workoutId: null, status: "planned" },
+  });
+
+  if (!allowResync && workout.garminActivityId) {
+    await prisma.ignoredActivity.upsert({
+      where: { userId_garminActivityId: { userId: userId!, garminActivityId: workout.garminActivityId } },
+      update: {},
+      create: { userId, garminActivityId: workout.garminActivityId, reason: "Slettet av bruker" },
+    });
+  }
+
+  await prisma.workout.delete({ where: { id: workout.id } });
+  res.json({ ok: true, ignored: !allowResync });
+});

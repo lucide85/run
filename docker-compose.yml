@@ -1,0 +1,28 @@
+# Kjøres på app-VM-en (ikke Traefik-VM-en).
+# Traefik står på en annen VM og ruter over nettverket til http://<APP_VM_IP>:3001.
+services:
+  treningsapp:
+    build: .
+    image: treningsapp:latest
+    container_name: treningsapp
+    restart: unless-stopped
+    ports:
+      # Eksponer porten på app-VM-en slik at Traefik-VM-en når den.
+      # Vil du kun slippe inn Traefik, bind til LAN-IP-en: "192.168.x.y:3001:3001"
+      - "3001:3001"
+    volumes:
+      # Hemmeligheter (Garmin, Anthropic-nøkkel, admin-login) – read-only
+      - ./config.json:/app/config.json:ro
+      # Persistente data (SQLite-databasen) – overlever omstart/oppdatering
+      - treningsapp-data:/app/server/prisma/data
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  treningsapp-data:

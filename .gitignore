@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+*.log
+*.tsbuildinfo
+
+# Lokale Claude-innstillinger (maskinspesifikke)
+.claude/settings.local.json
+
+# Hemmeligheter og lokale data
+config.json
+server/.garmin-session.json
+server/prisma/*.db
+server/prisma/*.db-journal
+server/prisma/data/
+*.sqlite
+
+# Editor
+.vscode/
+.idea/
+.DS_Store

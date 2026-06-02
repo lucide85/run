@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  // DB-en ligger i ./data slik at den kan persisteres på et eget Docker-volum
+  // uten å skjule schema.prisma. Stien er relativ til denne schema-fila.
+  url      = "file:./data/treningsapp.db"
+}
+
+/// En bruker av appen. Admin opprettes fra config.json; sekundærbrukere av admin.
+model User {
+  id                    Int       @id @default(autoincrement())
+  email                 String    @unique // = brukernavn/login
+  nickname              String
+  passwordHash          String
+  role                  String    @default("user") // "admin" | "user"
+  mustOnboard           Boolean   @default(true)
+
+  // Garmin (per bruker)
+  garminEmail           String?
+  garminPasswordEnc     String? // AES-kryptert
+  garminSessionJson     String?
+  lastGarminSync        DateTime?
+
+  // Treningsinnstillinger
+  maxHr                 Int       @default(195)
+  restHr                Int       @default(50)
+  raceName              String?
+  raceDate              DateTime?
+  trainingDaysJson      String? // JSON: ["Tue","Thu","Sun"]
+  onboardingAnswersJson String?
+
+  createdAt             DateTime  @default(now())
+
+  plannedSessions   PlannedSession[]
+  workouts          Workout[]
+  weightLogs        WeightLog[]
+  planChanges       PlanChange[]
+  ignoredActivities IgnoredActivity[]
+}
+
+/// Planlagt økt i en brukers treningsplan
+model PlannedSession {
+  id                Int       @id @default(autoincrement())
+  user              User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            Int?
+  week              Int
+  phase             Int
+  phaseName         String
+  type              String // "easy" | "quality" | "long" | "race"
+  slot              Int
+  title             String
+  description       String
+  targetZone        String?
+  targetPaceMinSec  Int?
+  targetPaceMaxSec  Int?
+  plannedDistanceKm Float?
+  date              DateTime
+  status            String    @default("planned") // planned | completed | skipped | moved
+  aiAdjusted        Boolean   @default(false)
+  notes             String?
+  workout           Workout?  @relation(fields: [workoutId], references: [id])
+  workoutId         Int?      @unique
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+/// Faktisk gjennomført økt importert fra Garmin
+model Workout {
+  id                Int       @id @default(autoincrement())
+  user              User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            Int?
+  garminActivityId  String
+  startTime         DateTime
+  sport             String?
+  name              String?
+  distanceKm        Float?
+  durationSec       Int?
+  avgHr             Int?
+  maxHr             Int?
+  avgPaceSecPerKm   Int?
+  elevationGainM    Float?
+  avgCadence        Int?
+  calories          Int?
+  hrZoneSecondsJson String?
+  streamsJson       String?
+  lapsJson          String?
+  rawType           String?
+  importedAt        DateTime  @default(now())
+  plannedSession    PlannedSession?
+  aiMessages        AiMessage[]
+
+  @@unique([userId, garminActivityId])
+  @@index([userId])
+}
+
+/// Garmin-aktiviteter brukeren har slettet/ignorert – synkes ikke inn igjen
+model IgnoredActivity {
+  id               Int      @id @default(autoincrement())
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           Int?
+  garminActivityId String
+  reason           String?
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, garminActivityId])
+  @@index([userId])
+}
+
+/// AI-meldinger (tilbakemelding + chat) knyttet til en økt
+model AiMessage {
+  id        Int      @id @default(autoincrement())
+  workout   Workout? @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  workoutId Int?
+  role      String // "user" | "assistant" | "system"
+  content   String
+  kind      String   @default("chat") // feedback | chat | plan_adjustment
+  createdAt DateTime @default(now())
+}
+
+/// Valgfri vektlogg
+model WeightLog {
+  id        Int      @id @default(autoincrement())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int?
+  date      DateTime
+  weightKg  Float
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+/// Logg over AI-foreslåtte planendringer (audit + angre)
+model PlanChange {
+  id        Int      @id @default(autoincrement())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int?
+  createdAt DateTime @default(now())
+  summary   String
+  diffJson  String
+  accepted  Boolean  @default(false)
+
+  @@index([userId])
+}

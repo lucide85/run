@@ -1,0 +1,37 @@
+{
+  "auth": {
+    "username": "ditt-brukernavn",
+    "password": "ditt-passord",
+    "nickname": "Assi"
+  },
+  "garmin": {
+    "email": "din-garmin-epost@example.com",
+    "password": "ditt-garmin-passord"
+  },
+  "anthropic": {
+    "apiKey": "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx",
+    "model": "claude-opus-4-8"
+  },
+  "race": {
+    "name": "10 km",
+    "date": "2026-10-01"
+  },
+  "training": {
+    "startDate": "2026-06-01",
+    "days": ["Tue", "Thu", "Sun"],
+    "maxHr": 195,
+    "restHr": 50
+  },
+  "server": {
+    "port": 3001,
+    "sessionSecret": "bytt-meg-til-en-lang-tilfeldig-streng",
+    "encryptionKey": "bytt-meg-til-en-annen-lang-tilfeldig-streng"
+  },
+  "google": {
+    "enabled": false,
+    "clientId": "",
+    "clientSecret": "",
+    "redirectUri": "http://localhost:3001/api/google/callback",
+    "calendarId": "primary"
+  }
+}
