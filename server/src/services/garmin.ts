@@ -2,8 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import AdmZip from "adm-zip";
-import { GarminConnect } from "garmin-connect";
+import GarminConnectModule from "garmin-connect";
+import type { GarminConnect } from "garmin-connect";
 import type { User } from "@prisma/client";
+
+// garmin-connect er en CommonJS-pakke – navngitte eksporter er ikke alltid synlige under
+// ESM (avhenger av Node-versjonens cjs-module-lexer; feilet på Node 20 i Docker).
+// Hent derfor konstruktøren defensivt fra modulobjektet.
+const GarminConnectCtor: any =
+  (GarminConnectModule as any)?.GarminConnect ?? (GarminConnectModule as any)?.default?.GarminConnect;
 import { prisma } from "../db.js";
 import { decrypt } from "../lib/crypto.js";
 import { parseFit, type ParsedWorkout } from "./fit.js";
@@ -24,7 +31,7 @@ export async function getGarminClient(user: User, mfaCode?: string): Promise<Gar
   if (cached) return cached;
 
   const { email, password } = garminCreds(user);
-  const client = new GarminConnect({ username: email, password });
+  const client = new GarminConnectCtor({ username: email, password });
 
   // Prøv lagret token-sesjon fra DB
   if (user.garminSessionJson) {

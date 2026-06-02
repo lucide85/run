@@ -3,7 +3,7 @@
 ############################################
 # Byggesteg – installerer alt og bygger
 ############################################
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 
 # Prisma trenger openssl tilstede ved generering
@@ -28,7 +28,7 @@ RUN npx prisma generate --schema=server/prisma/schema.prisma \
 ############################################
 # Kjøresteg – slankere image som kjører appen
 ############################################
-FROM node:20-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
