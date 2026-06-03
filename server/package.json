@@ -20,13 +20,18 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@prisma/client": "^5.22.0",
     "adm-zip": "^0.5.16",
+    "axios": "^1.17.0",
+    "axios-cookiejar-support": "^7.0.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "fit-file-parser": "^1.21.0",
-    "garmin-connect": "^1.6.0"
+    "garmin-connect": "^1.6.0",
+    "oauth-1.0a": "^2.2.6",
+    "qs": "^6.15.2",
+    "tough-cookie": "^6.0.1"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",

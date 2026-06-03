@@ -171,7 +171,12 @@ export const api = {
   updateSettings: (data: Partial<Settings["training"]>) =>
     req<{ ok: true; regenerated: boolean }>("/api/settings", { method: "PUT", body: JSON.stringify(data) }),
   connectGarmin: (email: string, password: string) =>
-    req<{ ok: true }>("/api/settings/garmin", { method: "POST", body: JSON.stringify({ email, password }) }),
+    req<{ ok: true; mfaRequired: boolean }>("/api/settings/garmin", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  submitGarminMfa: (code: string) =>
+    req<{ ok: true }>("/api/settings/garmin/mfa", { method: "POST", body: JSON.stringify({ code }) }),
   disconnectGarmin: () => req<{ ok: true }>("/api/settings/garmin", { method: "DELETE" }),
 
   // onboarding / AI-plan

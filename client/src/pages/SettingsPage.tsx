@@ -16,6 +16,9 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
   const [gEmail, setGEmail] = useState("");
   const [gPw, setGPw] = useState("");
   const [gMsg, setGMsg] = useState("");
+  const [mfaNeeded, setMfaNeeded] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
+  const [gBusy, setGBusy] = useState(false);
 
   async function load() {
     const s = await api.settings();
@@ -54,19 +57,47 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
 
   async function connectGarmin() {
     setGMsg("");
+    setGBusy(true);
     try {
-      await api.connectGarmin(gEmail, gPw);
+      const r = await api.connectGarmin(gEmail, gPw);
+      if (r.mfaRequired) {
+        setMfaNeeded(true);
+        setGMsg("Garmin sendte en sikkerhetskode (e-post/SMS/app). Skriv den inn under.");
+      } else {
+        setGEmail("");
+        setGPw("");
+        setGMsg("Garmin koblet til ✓");
+        await load();
+      }
+    } catch (e) {
+      setGMsg(`Feil: ${(e as Error).message}`);
+    } finally {
+      setGBusy(false);
+    }
+  }
+
+  async function submitMfa() {
+    setGMsg("");
+    setGBusy(true);
+    try {
+      await api.submitGarminMfa(mfaCode);
+      setMfaNeeded(false);
+      setMfaCode("");
       setGEmail("");
       setGPw("");
       setGMsg("Garmin koblet til ✓");
       await load();
     } catch (e) {
       setGMsg(`Feil: ${(e as Error).message}`);
+    } finally {
+      setGBusy(false);
     }
   }
 
   async function disconnectGarmin() {
     await api.disconnectGarmin();
+    setMfaNeeded(false);
+    setMfaCode("");
     await load();
   }
 
@@ -193,6 +224,36 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
           <Button variant="ghost" onClick={disconnectGarmin}>
             Koble fra Garmin
           </Button>
+        ) : mfaNeeded ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Garmin-kontoen har to-faktor. Skriv inn sikkerhetskoden du fikk på e-post/SMS/app.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && mfaCode && !gBusy && submitMfa()}
+                placeholder="Sikkerhetskode"
+                inputMode="numeric"
+                autoFocus
+                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 tracking-widest"
+              />
+              <Button onClick={submitMfa} disabled={!mfaCode || gBusy}>
+                {gBusy ? "Logger inn…" : "Bekreft kode"}
+              </Button>
+            </div>
+            <button
+              onClick={() => {
+                setMfaNeeded(false);
+                setMfaCode("");
+                setGMsg("");
+              }}
+              className="text-xs text-slate-400 hover:text-brand-600"
+            >
+              Avbryt
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-slate-400">
@@ -212,12 +273,12 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
                 placeholder="Garmin passord"
                 className="flex-1 rounded-xl border border-slate-200 px-3 py-2"
               />
-              <Button onClick={connectGarmin} disabled={!gEmail || !gPw}>
-                Koble til
+              <Button onClick={connectGarmin} disabled={!gEmail || !gPw || gBusy}>
+                {gBusy ? "Logger inn…" : "Koble til"}
               </Button>
             </div>
             <p className="text-xs text-slate-400">
-              Har kontoen to-faktor (MFA)? Da må admin koble til via serveren foreløpig.
+              Har kontoen to-faktor (MFA)? Det støttes nå – du blir bedt om koden etter at du trykker «Koble til».
             </p>
           </div>
         )}

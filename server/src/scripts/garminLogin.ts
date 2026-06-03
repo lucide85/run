@@ -8,26 +8,19 @@ import { prisma } from "../db.js";
 async function main() {
   const rl = readline.createInterface({ input, output });
   console.log("Logger inn mot Garmin Connect...");
-  console.log("(Hvis kontoen din har to-faktor, får du beskjed om å taste inn en kode.)\n");
-
-  const useMfa = (await rl.question("Har kontoen din to-faktor (MFA)? [j/N]: "))
-    .trim()
-    .toLowerCase();
-
-  let mfaCode: string | undefined;
-  if (useMfa === "j" || useMfa === "ja" || useMfa === "y") {
-    mfaCode = (await rl.question("Skriv inn MFA-koden fra appen/SMS: ")).trim();
-  }
-  rl.close();
+  console.log("(Hvis kontoen din har to-faktor, blir du bedt om å taste inn koden underveis.)\n");
 
   try {
     const admin = await ensureAdminAndBackfill();
-    await loginAndPersist(admin, mfaCode);
+    await loginAndPersist(admin, async () =>
+      (await rl.question("Skriv inn sikkerhetskoden fra e-post/SMS/app: ")).trim()
+    );
     console.log("\n✅ Innlogging lyktes (admin). Sesjonen er lagret og gjenbrukes ved synk.");
   } catch (e) {
     console.error(`\n❌ Innlogging feilet: ${(e as Error).message}`);
     process.exit(1);
   } finally {
+    rl.close();
     await prisma.$disconnect();
   }
 }

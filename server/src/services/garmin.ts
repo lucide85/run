@@ -14,9 +14,65 @@ const GarminConnectCtor: any =
 import { prisma } from "../db.js";
 import { decrypt } from "../lib/crypto.js";
 import { parseFit, type ParsedWorkout } from "./fit.js";
+import {
+  startGarminLogin,
+  submitGarminMfa,
+  type GarminTokens,
+  type PendingMfa,
+} from "./garminAuth.js";
 
 // Én klient per bruker (cachet i minnet)
 const clients = new Map<number, GarminConnect>();
+
+// Mellomtilstand for to-faktor-innlogging (per bruker, kort levetid)
+const pendingMfa = new Map<number, PendingMfa>();
+const MFA_TTL_MS = 10 * 60 * 1000;
+
+/** Lagre OAuth-tokens for en bruker og tøm cachet klient. */
+async function saveTokens(userId: number, tokens: GarminTokens): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { garminSessionJson: JSON.stringify(tokens) },
+  });
+  clients.delete(userId);
+}
+
+/**
+ * Start innlogging mot Garmin med e-post + passord. Returnerer `{ mfaRequired: true }`
+ * hvis kontoen har to-faktor – kall da `completeGarminMfa` med koden brukeren mottar.
+ */
+export async function beginGarminLogin(
+  userId: number,
+  email: string,
+  password: string
+): Promise<{ mfaRequired: boolean }> {
+  const result = await startGarminLogin(email, password);
+  if (result.status === "ok") {
+    pendingMfa.delete(userId);
+    await saveTokens(userId, result.tokens);
+    return { mfaRequired: false };
+  }
+  pendingMfa.set(userId, result.pending);
+  return { mfaRequired: true };
+}
+
+/** Fullfør to-faktor-innlogging med sikkerhetskoden. */
+export async function completeGarminMfa(userId: number, code: string): Promise<void> {
+  const pending = pendingMfa.get(userId);
+  if (!pending || Date.now() - pending.createdAt > MFA_TTL_MS) {
+    pendingMfa.delete(userId);
+    throw new Error("Innloggingsøkten utløp. Start innloggingen mot Garmin på nytt.");
+  }
+  const tokens = await submitGarminMfa(pending, code);
+  pendingMfa.delete(userId);
+  await saveTokens(userId, tokens);
+}
+
+/** Er det en MFA-innlogging som venter på kode for denne brukeren? */
+export function hasPendingMfa(userId: number): boolean {
+  const p = pendingMfa.get(userId);
+  return !!p && Date.now() - p.createdAt <= MFA_TTL_MS;
+}
 
 function garminCreds(user: User): { email: string; password: string } {
   if (!user.garminEmail || !user.garminPasswordEnc) {
@@ -26,18 +82,17 @@ function garminCreds(user: User): { email: string; password: string } {
 }
 
 /** Logger inn for en bruker (gjenbruker lagret sesjon hvis mulig). */
-export async function getGarminClient(user: User, mfaCode?: string): Promise<GarminConnect> {
+export async function getGarminClient(user: User): Promise<GarminConnect> {
   const cached = clients.get(user.id);
   if (cached) return cached;
 
   const { email, password } = garminCreds(user);
   const client = new GarminConnectCtor({ username: email, password });
 
-  // Prøv lagret token-sesjon fra DB
+  // Prøv lagret token-sesjon fra DB (settes ved innlogging, fornyes automatisk av biblioteket)
   if (user.garminSessionJson) {
     try {
-      const saved = JSON.parse(user.garminSessionJson);
-      // @ts-ignore — API varierer mellom versjoner
+      const saved = JSON.parse(user.garminSessionJson) as GarminTokens;
       client.loadToken(saved.oauth1, saved.oauth2);
       clients.set(user.id, client);
       return client;
@@ -46,35 +101,17 @@ export async function getGarminClient(user: User, mfaCode?: string): Promise<Gar
     }
   }
 
-  try {
-    if (mfaCode) {
-      // @ts-ignore — noen versjoner støtter MFA-callback
-      await client.login(email, password, async () => mfaCode);
-    } else {
-      await client.login();
-    }
-  } catch (e) {
+  // Ingen lagret sesjon – logg inn på nytt via vår egen SSO-flyt.
+  const result = await startGarminLogin(email, password);
+  if (result.status !== "ok") {
     throw new Error(
-      `Innlogging mot Garmin feilet: ${(e as Error).message}. ` +
-        `Hvis kontoen har to-faktor, må den foreløpig settes opp via admin-CLI (npm run garmin:login).`
+      "Garmin-kontoen krever to-faktor (MFA). Koble til Garmin på nytt i Innstillinger og skriv inn sikkerhetskoden."
     );
   }
-
-  await persistSession(user.id, client);
+  await saveTokens(user.id, result.tokens);
+  client.loadToken(result.tokens.oauth1, result.tokens.oauth2);
   clients.set(user.id, client);
   return client;
-}
-
-async function persistSession(userId: number, client: GarminConnect): Promise<void> {
-  try {
-    // @ts-ignore — exportToken() finnes i nyere versjoner
-    const token = client.exportToken?.();
-    if (token) {
-      await prisma.user.update({ where: { id: userId }, data: { garminSessionJson: JSON.stringify(token) } });
-    }
-  } catch {
-    // ignorer — logger inn på nytt neste gang
-  }
 }
 
 export interface GarminActivitySummary {
@@ -120,11 +157,22 @@ function findFitBuffer(dir: string): Buffer | null {
   return null;
 }
 
-/** Brukes av CLI-scriptet for engangs-innlogging (ev. med MFA) for en gitt bruker. */
-export async function loginAndPersist(user: User, mfaCode?: string): Promise<void> {
+/**
+ * Brukes av CLI-scriptet for engangs-innlogging for en gitt bruker. Hvis kontoen har
+ * to-faktor blir `promptCode` kalt for å hente sikkerhetskoden interaktivt.
+ */
+export async function loginAndPersist(user: User, promptCode?: () => Promise<string>): Promise<void> {
   clients.delete(user.id);
-  await prisma.user.update({ where: { id: user.id }, data: { garminSessionJson: null } });
-  await getGarminClient(user, mfaCode);
+  const { email, password } = garminCreds(user);
+  const result = await startGarminLogin(email, password);
+  if (result.status === "ok") {
+    await saveTokens(user.id, result.tokens);
+    return;
+  }
+  if (!promptCode) throw new Error("Kontoen krever en MFA-kode.");
+  const code = await promptCode();
+  const tokens = await submitGarminMfa(result.pending, code);
+  await saveTokens(user.id, tokens);
 }
 
 /** Tøm cachet klient (f.eks. etter at brukeren endrer Garmin-innlogging). */
