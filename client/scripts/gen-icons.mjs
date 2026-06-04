@@ -1,0 +1,58 @@
+// Genererer PWA-/favicon-ikoner som matcher app-logoen:
+// teal gradient-firkant (primary-300 -> 500 -> 600) + hvit fa-person-running.
+// Kjør: node client/scripts/gen-icons.mjs   (sharp ligger i repo-rot/node_modules)
+import sharp from "sharp";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PUB = resolve(__dirname, "../public");
+
+// FontAwesome 6 "person-running" (solid), viewBox 0 0 448 512
+const RUN_PATH =
+  "M320 48a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM125.7 175.5c9.9-9.9 23.4-15.5 37.5-15.5c1.9 0 3.8 .1 5.6 .3L137.6 254c-9.3 28 1.7 58.8 26.8 74.5l86.2 53.9-25.4 88.8c-4.9 17 5 34.7 22 39.6s34.7-5 39.6-22l28.7-100.4c5.9-20.6-2.6-42.6-20.7-53.9L238 299l30.9-82.4 5.1 12.3C289 264.7 323.9 288 362.7 288l21.3 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-21.3 0c-12.9 0-24.6-7.8-29.5-19.7l-6.3-15c-14.6-35.1-44.1-61.9-80.5-73.1l-48.7-15c-11.1-3.4-22.7-5.2-34.4-5.2c-31 0-60.8 12.3-82.7 34.3L57.4 153.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l23.1-23.1zM91.2 352L32 352c-17.7 0-32 14.3-32 32s14.3 32 32 32l69.6 0c19 0 36.2-11.2 43.9-28.5L157 361.6l-9.5-6c-17.5-10.9-30.5-26.8-37.9-44.9L91.2 352z";
+
+// Bygg en SVG. glyphScale = hvor stor løperen er ift. lerretet. rx = hjørneradius.
+function svg({ rx = 104, glyphScale = 0.53 }) {
+  const S = 512;
+  const gw = 448, gh = 512;
+  const target = S * glyphScale;          // ønsket høyde på glyfen
+  const scale = target / gh;
+  const tx = (S - gw * scale) / 2;
+  const ty = (S - gh * scale) / 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#62C9D9"/>
+      <stop offset="0.6" stop-color="#008094"/>
+      <stop offset="1" stop-color="#004B57"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="${S}" height="${S}" rx="${rx}" fill="url(#bg)"/>
+  <g transform="translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${scale.toFixed(5)})">
+    <path d="${RUN_PATH}" fill="#ffffff"/>
+  </g>
+</svg>`;
+}
+
+const standard = svg({ rx: 104, glyphScale: 0.53 });
+// maskable: full-bleed bakgrunn (rx 0) + mindre glyf innenfor 80% trygg sone
+const maskable = svg({ rx: 0, glyphScale: 0.42 });
+
+async function png(svgStr, size, name) {
+  await sharp(Buffer.from(svgStr)).resize(size, size).png().toFile(resolve(PUB, name));
+  console.log("  ✓", name, `(${size}px)`);
+}
+
+console.log("Genererer ikoner i", PUB);
+await png(standard, 512, "pwa-512x512.png");
+await png(standard, 192, "pwa-192x192.png");
+await png(maskable, 512, "maskable-512x512.png");
+await png(standard, 180, "apple-touch-icon.png");
+await png(standard, 32, "favicon-32x32.png");
+
+// favicon.svg (skarp vektor i nettleserfanen)
+const fs = await import("fs/promises");
+await fs.writeFile(resolve(PUB, "favicon.svg"), standard.replace(/\n\s*/g, "\n"));
+console.log("  ✓ favicon.svg");
+console.log("Ferdig.");

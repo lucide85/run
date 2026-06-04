@@ -14,8 +14,8 @@ export default defineConfig({
         description:
           "Følg løpeprogrammet ditt, synk fra Garmin og få AI-vurdering av hver økt.",
         lang: "no",
-        theme_color: "#0ea5e9",
-        background_color: "#f8fafc",
+        theme_color: "#008094",
+        background_color: "#EEF1F2",
         display: "standalone",
         orientation: "portrait",
         start_url: "/",
