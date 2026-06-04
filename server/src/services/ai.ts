@@ -92,19 +92,24 @@ export async function evaluateWorkout(
   planned: PlannedSession | null,
   history: string
 ): Promise<string> {
+  const place = workout.name?.trim();
+
   const userText = `Her er en gjennomført treningsøkt jeg lastet opp fra Garmin.
 
 ${plannedContext(planned)}
 
 GJENNOMFØRT ØKT:
 ${summarizeWorkout(workout)}
+${place ? `Sted/navn på økten: ${place}` : ""}
 
 ${history ? `SISTE ØKTER (kontekst):\n${history}\n` : ""}
-Gi meg en kort, konkret vurdering: Traff jeg hensikten med økten (riktig sone/tempo)? Hva var bra? Er det noe å justere til neste gang? Maks 150 ord.`;
+SVARET DITT (markdown, norsk):
+1) START med en kort, lett humoristisk innledning (1–3 setninger) – gjerne en liten vits eller et passende, motiverende sitat. VARIÉR stilen fra gang til gang så det er gøy å lese: noen ganger en vits, noen ganger et sitat, noen ganger en treffende observasjon fra økten (f.eks. tempo, puls, høydemeter, varighet)${place ? ` eller stedet («${place}»)` : ""}. Du trenger IKKE bruke sted eller øktdata hver gang – bare når det faller naturlig. Ikke vær teit eller kunstig; hold det varmt og ekte.
+2) Deretter en blank linje, så en SAKLIG vurdering: Traff jeg hensikten med økten (riktig sone/tempo)? Hva var bra? Er det noe å justere til neste gang? Hold vurderingsdelen til maks ~150 ord.`;
 
   const resp = await getClient().messages.create({
     model: model(),
-    max_tokens: 700,
+    max_tokens: 900,
     system: systemBlocks(user),
     messages: [{ role: "user", content: userText }],
   });
@@ -142,7 +147,11 @@ ${summarizeWorkout(workout)}`;
   return textOf(resp);
 }
 
-/** Korte, presise pulsklokke-tips for en planlagt økt. */
+/**
+ * Nybegynnervennlig beskrivelse av en planlagt økt: HVORFOR akkurat denne økten
+ * er bra for løperen nå – treningseffekter, hvordan den skal kjennes, og til slutt
+ * en LITEN del om hvordan klokka settes opp. Skaleres etter hvor sammensatt økten er.
+ */
 export async function generateWatchTips(user: User, session: PlannedSession): Promise<string> {
   const fmtPace = (s?: number | null) =>
     s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} min/km` : null;
@@ -165,27 +174,36 @@ export async function generateWatchTips(user: User, session: PlannedSession): Pr
       : null;
 
   const watch = user.watchModel?.trim()
-    ? `Brukeren har en ${user.watchModel.trim()} – gi tips spesifikt for den (menyer/funksjoner den faktisk har).`
-    : "Brukeren har ikke oppgitt klokkemodell – gi generelle tips som passer vanlige GPS-pulsklokker.";
+    ? `Brukeren har en ${user.watchModel.trim()} – nevn gjerne konkrete menyer/funksjoner den faktisk har.`
+    : "Brukeren har ikke oppgitt klokkemodell – hold klokketipsene generelle for vanlige GPS-pulsklokker.";
 
-  const userText = `Lag korte oppsettstips for pulsklokken til denne planlagte økten.
+  // Enkle økter (rolig/langtur) → kort. Kvalitet/intervall/kreative → fyldigere.
+  const isSimple = session.type === "easy" || session.type === "long";
+
+  const userText = `Forklar for ${user.nickname} – som IKKE er godt vant med trening – hvorfor nettopp denne planlagte økten er en god økt for henne/ham akkurat nå. Vær konkret, varm og motiverende, og knytt det til hvor i programmet vi er.
 
 ØKT (uke ${session.week}, ${session.phaseName}, type "${session.type}"): ${session.title}
 ${session.description}
-${session.targetZone ? `Målsone: ${session.targetZone} (${zoneInfo})` : ""}
-${paceRange ? `Måltempo: ${paceRange} /km` : ""}
+${session.targetZone ? `Målsone: ${session.targetZone}${zoneInfo ? ` (${zoneInfo})` : ""}` : ""}
+${paceRange ? `Måltempo: ${paceRange}` : ""}
 ${session.plannedDistanceKm ? `Planlagt distanse: ${session.plannedDistanceKm} km` : ""}
 
 ${watch}
 
-KRAV TIL SVARET (markdown, norsk):
-- Start med én linje "🎯 Mål:" med pulssone i bpm${paceRange ? " og tempo" : ""} – bruk de EKSAKTE tallene over.
-- Deretter klokkeoppsett: for ENKLE økter (rolig/langtur) maks 2–3 korte punkter (f.eks. pulsvarsel/sonealarm og datafelt). For INTERVALL-/kvalitetsøkter: konkret oppsett av intervall-/treningsøkt-funksjonen (drag, pauser, mål per del) + 2–3 tips for godt utbytte (oppvarming, disponering, vanlige feil).
-- Maks ~120 ord totalt. Ingen innledning eller avslutning.`;
+KRAV TIL SVARET (markdown på norsk, vennlig "du"-form):
+${
+  isSimple
+    ? `- Dette er en ENKEL økt. Hold deg kort og lettlest: 1 kort innledning + 3–5 punkter om hva økten gir deg og hvordan den skal kjennes (rolig = rolig!). Ikke overforklar.`
+    : `- Dette er en mer SAMMENSATT økt (kvalitet/intervall e.l.). Forklar grundigere, gjerne med en liten tabell "del av økten → hovedeffekt", en kort "Samlet effekt"-liste, og noen "Når og hvordan"-punkter. Hold det ryddig og motiverende.`
+}
+- Få tydelig fram hva treningseffekten er og hvorfor den passer for en som bygger seg opp mot 10 km – uten unødig fagsjargong (forklar korte begreper hvis du bruker dem).
+- Nevn målsonen i bpm${paceRange ? " og forventet tempo" : ""} et naturlig sted, med de EKSAKTE tallene over.
+- AVSLUTT med en LITEN egen del med overskrift "### ⌚ Slik setter du opp klokka" – maks 2–4 korte punkter (pulsvarsel/sonealarm, datafelt, og for intervalløkter et raskt ord om intervall-/treningsøkt-funksjonen). Dette skal være en liten hale til slutt, ikke hoveddelen.
+- ${isSimple ? "Maks ~180 ord totalt." : "Maks ~320 ord totalt."} Ingen meta-kommentarer om at du er en AI.`;
 
   const resp = await getClient().messages.create({
     model: model(),
-    max_tokens: 600,
+    max_tokens: 1300,
     system: systemBlocks(user),
     messages: [{ role: "user", content: userText }],
   });

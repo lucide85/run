@@ -24,10 +24,11 @@ export function SyncButton({ onDone }: { onDone?: () => void }) {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      {msg && <span className="text-xs text-slate-500">{msg}</span>}
-      <Button onClick={run} disabled={busy}>
-        {busy ? "Synker…" : "↻ Synk med Garmin"}
+    <div className="flex items-center gap8">
+      {msg && <span className="muted" style={{ fontSize: 12 }}>{msg}</span>}
+      <Button variant="secondary" onClick={run} disabled={busy}>
+        <i className={`fa-solid ${busy ? "fa-arrows-rotate fa-spin" : "fa-arrows-rotate"}`} />
+        {busy ? "Synker…" : "Synk med Garmin"}
       </Button>
     </div>
   );

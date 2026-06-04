@@ -1,16 +1,36 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, ReactNode } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Legend,
 } from "recharts";
 import { api, Workout, WeightLog } from "../api/client";
-import { Card, PageTitle, Spinner, Button } from "../components/ui";
+import { PageTitle, Spinner, Button } from "../components/ui";
 import { pace, dateShort } from "../lib/format";
+
+const C_PACE = "#2C4894"; // secondary
+const C_VOL = "#7A52CC"; // langtur
+const C_HR = "#D7263D"; // løp
+const C_WEIGHT = "#008094"; // primary
 
 function weekKey(iso: string): string {
   const d = new Date(iso);
   const onejan = new Date(d.getFullYear(), 0, 1);
   const week = Math.ceil(((d.getTime() - onejan.getTime()) / 86400000 + onejan.getDay() + 1) / 7);
   return `U${week}`;
+}
+
+function ChartCard({ title, sub, children, foot }: { title: string; sub?: string; children: ReactNode; foot?: ReactNode }) {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>{title}</h3>
+      </div>
+      <div className="card-body">
+        {sub && <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>{sub}</div>}
+        {children}
+        {foot}
+      </div>
+    </div>
+  );
 }
 
 export default function Progress() {
@@ -59,104 +79,95 @@ export default function Progress() {
 
   return (
     <div>
-      <PageTitle title="Progresjon" subtitle="Utvikling over tid" />
+      <PageTitle title="Progresjon" subtitle="Utvikling over tid — slik bygger formen seg" />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <h3 className="mb-3 font-semibold text-slate-700">Tempoutvikling</h3>
+      <div className="grid g2">
+        <ChartCard title="Tempoutvikling" sub="Lavere er raskere. Trenden går rett vei.">
           {paceData.length === 0 ? (
             <Empty />
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={paceData} margin={{ left: -5, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#cbd5e1" />
-                <YAxis reversed tickFormatter={(v) => pace(v)} tick={{ fontSize: 11 }} stroke="#cbd5e1" domain={["dataMin - 20", "dataMax + 20"]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#ECEDEE" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#CACACE" />
+                <YAxis reversed tickFormatter={(v) => pace(v)} tick={{ fontSize: 11 }} stroke="#CACACE" domain={["dataMin - 20", "dataMax + 20"]} />
                 <Tooltip formatter={(v) => [`${pace(v as number)} /km`, "Tempo"]} />
-                <Line type="monotone" dataKey="pace" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="pace" stroke={C_PACE} strokeWidth={2.5} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
-        </Card>
+        </ChartCard>
 
-        <Card>
-          <h3 className="mb-3 font-semibold text-slate-700">Ukentlig volum (km)</h3>
+        <ChartCard title="Ukentlig volum (km)" sub="Hvor mye du løper hver uke.">
           {volumeData.length === 0 ? (
             <Empty />
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={volumeData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="week" tick={{ fontSize: 11 }} stroke="#cbd5e1" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#cbd5e1" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#ECEDEE" />
+                <XAxis dataKey="week" tick={{ fontSize: 11 }} stroke="#CACACE" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#CACACE" />
                 <Tooltip formatter={(v) => [`${v} km`, "Volum"]} />
-                <Bar dataKey="km" fill="#a78bfa" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="km" fill={C_VOL} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
-        </Card>
+        </ChartCard>
 
-        <Card>
-          <h3 className="mb-3 font-semibold text-slate-700">Puls vs. tempo (løp)</h3>
-          <p className="mb-2 text-xs text-slate-400">Bedre form = lavere puls ved samme tempo over tid.</p>
+        <ChartCard title="Puls vs. tempo (løp)" sub="Bedre form = lavere puls ved samme tempo over tid.">
           {effData.length === 0 ? (
             <Empty />
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={effData} margin={{ left: -5, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#cbd5e1" />
-                <YAxis yAxisId="hr" tick={{ fontSize: 11 }} stroke="#f43f5e" domain={["dataMin - 5", "dataMax + 5"]} />
-                <YAxis yAxisId="pace" orientation="right" reversed tickFormatter={(v) => pace(v)} tick={{ fontSize: 11 }} stroke="#3b82f6" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#ECEDEE" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#CACACE" />
+                <YAxis yAxisId="hr" tick={{ fontSize: 11 }} stroke={C_HR} domain={["dataMin - 5", "dataMax + 5"]} />
+                <YAxis yAxisId="pace" orientation="right" reversed tickFormatter={(v) => pace(v)} tick={{ fontSize: 11 }} stroke={C_PACE} />
                 <Tooltip formatter={(v, n) => (n === "pace" ? [`${pace(v as number)} /km`, "Tempo"] : [`${v} bpm`, "Puls"])} />
                 <Legend />
-                <Line yAxisId="hr" type="monotone" dataKey="hr" name="Puls" stroke="#f43f5e" strokeWidth={2} dot={{ r: 2 }} />
-                <Line yAxisId="pace" type="monotone" dataKey="pace" name="pace" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} />
+                <Line yAxisId="hr" type="monotone" dataKey="hr" name="Puls" stroke={C_HR} strokeWidth={2.5} dot={{ r: 2 }} />
+                <Line yAxisId="pace" type="monotone" dataKey="pace" name="pace" stroke={C_PACE} strokeWidth={2.5} dot={{ r: 2 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
-        </Card>
+        </ChartCard>
 
-        <Card>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-700">Vekt (kg)</h3>
+        <div className="card">
+          <div className="card-head">
+            <h3>Vekt (kg)</h3>
           </div>
-          <div className="mb-4 flex gap-2">
-            <input
-              type="date"
-              value={wDate}
-              onChange={(e) => setWDate(e.target.value)}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            />
-            <input
-              value={wVal}
-              onChange={(e) => setWVal(e.target.value)}
-              placeholder="kg"
-              className="w-20 rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            />
-            <Button variant="soft" onClick={addWeight}>
-              Logg
-            </Button>
+          <div className="card-body">
+            <div className="flex gap8 wrap items-center" style={{ marginBottom: 14 }}>
+              <input className="input" type="date" value={wDate} onChange={(e) => setWDate(e.target.value)} style={{ flex: "1 1 150px" }} />
+              <input className="input" value={wVal} onChange={(e) => setWVal(e.target.value)} placeholder="kg" inputMode="decimal" style={{ flex: "0 0 90px" }} />
+              <Button onClick={addWeight}>Logg</Button>
+            </div>
+            {weightData.length === 0 ? (
+              <Empty text="Logg vekten din for å se utviklingen." />
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={weightData} margin={{ left: -5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ECEDEE" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#CACACE" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="#CACACE" domain={["dataMin - 1", "dataMax + 1"]} />
+                  <Tooltip formatter={(v) => [`${v} kg`, "Vekt"]} />
+                  <Line type="monotone" dataKey="kg" stroke={C_WEIGHT} strokeWidth={2.5} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
-          {weightData.length === 0 ? (
-            <Empty text="Logg vekten din for å se utviklingen." />
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={weightData} margin={{ left: -5, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#cbd5e1" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#cbd5e1" domain={["dataMin - 1", "dataMax + 1"]} />
-                <Tooltip formatter={(v) => [`${v} kg`, "Vekt"]} />
-                <Line type="monotone" dataKey="kg" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </Card>
+        </div>
       </div>
     </div>
   );
 }
 
 function Empty({ text = "Ingen data ennå." }: { text?: string }) {
-  return <div className="py-16 text-center text-sm text-slate-300">{text}</div>;
+  return (
+    <div className="muted" style={{ textAlign: "center", padding: "44px 10px", fontSize: 13.5 }}>
+      <i className="fa-solid fa-chart-line" style={{ fontSize: 24, opacity: 0.35, display: "block", marginBottom: 10 }} />
+      {text}
+    </div>
+  );
 }

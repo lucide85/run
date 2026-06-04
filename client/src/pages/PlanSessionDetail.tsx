@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, PlannedSession, Settings } from "../api/client";
-import { Card, PageTitle, Spinner, Button, TypeBadge, StatusBadge } from "../components/ui";
-import { dateNo, dist, duration, pace } from "../lib/format";
+import { PageTitle, Spinner, TypeBadge, StatusBadge } from "../components/ui";
+import { dateNo, pace, dist, duration } from "../lib/format";
 import { computeZones, ZONE_COLORS, Zone } from "../lib/zones";
 import { Markdown } from "../components/Markdown";
 
@@ -18,6 +18,29 @@ function targetZones(targetZone: string | null | undefined, zones: Zone[]): Zone
   return zones.filter((z) => z.zone >= min && z.zone <= max);
 }
 
+function StatTile({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+  return (
+    <div
+      style={{
+        background: "var(--grey-50)",
+        borderRadius: 12,
+        padding: "13px 15px",
+        border: "1px solid var(--border-subtle)",
+      }}
+    >
+      <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 3 }}>{value}</div>
+      {sub && (
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PlanSessionDetail() {
   const { id } = useParams();
   const sid = Number(id);
@@ -31,7 +54,7 @@ export default function PlanSessionDetail() {
     const [session, st] = await Promise.all([api.session(sid), api.settings()]);
     setS(session);
     setSettings(st);
-    // Hent (eller generer) klokketips – caches på serveren per økt + klokkemodell
+    // Hent (eller generer) øktbeskrivelse – caches på serveren per økt + klokkemodell
     setTipsLoading(true);
     try {
       const r = await api.watchTips(sid);
@@ -90,146 +113,174 @@ export default function PlanSessionDetail() {
       : null;
   const hrOk = w?.avgHr && tz.length > 0 ? w.avgHr >= tz[0].min && w.avgHr <= tz[tz.length - 1].max : null;
 
-  const check = (ok: boolean | null) => (ok == null ? "" : ok ? " ✅" : " ⚠️");
+  const check = (ok: boolean | null) =>
+    ok == null ? null : ok ? (
+      <i className="fa-solid fa-circle-check" style={{ color: "var(--t-fullfort)", marginLeft: 6 }} />
+    ) : (
+      <i className="fa-solid fa-triangle-exclamation" style={{ color: "var(--warning-700)", marginLeft: 6 }} />
+    );
+
+  const cmp = (label: string, plan: React.ReactNode, act: React.ReactNode) => (
+    <div
+      className="flex items-center between"
+      style={{ padding: "13px 0", borderBottom: "1px solid var(--border-subtle)" }}
+    >
+      <div style={{ fontSize: 14, fontWeight: 600, flex: "0 0 110px" }}>{label}</div>
+      <div className="muted tnum" style={{ flex: 1, textAlign: "right", fontSize: 13.5 }}>
+        {plan}
+      </div>
+      <div className="tnum" style={{ flex: 1, textAlign: "right", fontSize: 14, fontWeight: 700 }}>
+        {act}
+      </div>
+    </div>
+  );
 
   return (
-    <div>
+    <>
       <PageTitle
         title={s.title}
         subtitle={`${dateNo(s.date)} · Uke ${s.week} · ${s.phaseName}`}
         action={
-          <Link to="/program" className="text-sm text-brand-600 hover:underline">
-            ← Programmet
+          <Link to="/program" className="btn btn-ghost">
+            <i className="fa-solid fa-arrow-left" />
+            Programmet
           </Link>
         }
       />
 
-      <div className="mb-4 flex items-center gap-2">
+      <div className="flex items-center gap8" style={{ marginBottom: 18 }}>
         <TypeBadge type={s.type} />
         <StatusBadge status={s.status} />
-        {s.aiAdjusted && <span className="text-xs text-brand-600">✨ AI-justert</span>}
+        {s.aiAdjusted && (
+          <span className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>
+            <i className="fa-solid fa-wand-magic-sparkles" style={{ color: "var(--t-langtur)", marginRight: 5 }} />
+            AI-justert
+          </span>
+        )}
       </div>
 
       {/* Slik skal økten gjennomføres */}
-      <Card className="mb-6">
-        <h3 className="mb-2 font-semibold text-slate-700">Slik skal økten gjennomføres</h3>
-        <p className="text-sm leading-relaxed text-slate-600">{s.description}</p>
-
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {s.targetZone && (
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs text-slate-400">Målsone</div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-                {tz[0] && (
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ZONE_COLORS[tz[0].zone - 1] }} />
-                )}
-                {s.targetZone}
-              </div>
-              {hrRange && <div className="text-xs text-slate-500">{hrRange}</div>}
-            </div>
-          )}
-          {paceRange && (
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs text-slate-400">Måltempo</div>
-              <div className="mt-0.5 text-sm font-semibold text-slate-700">{paceRange}</div>
-            </div>
-          )}
-          {s.plannedDistanceKm && (
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs text-slate-400">Distanse</div>
-              <div className="mt-0.5 text-sm font-semibold text-slate-700">{dist(s.plannedDistanceKm)}</div>
-            </div>
-          )}
-          <div className="rounded-xl bg-slate-50 p-3">
-            <div className="text-xs text-slate-400">Dato</div>
-            <div className="mt-0.5 text-sm font-semibold text-slate-700">{dateNo(s.date)}</div>
-          </div>
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Slik skal økten gjennomføres</h3>
         </div>
+        <div className="card-body">
+          <p style={{ fontSize: 15, marginBottom: 16, marginTop: 0 }}>{s.description}</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+            {s.targetZone && (
+              <StatTile
+                label="Målsone"
+                value={
+                  <span className="flex items-center" style={{ gap: 7 }}>
+                    {tz[0] && (
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: ZONE_COLORS[tz[0].zone - 1],
+                          display: "inline-block",
+                        }}
+                      />
+                    )}
+                    {s.targetZone}
+                  </span>
+                }
+                sub={hrRange ?? undefined}
+              />
+            )}
+            {paceRange && <StatTile label="Måltempo" value={paceRange} />}
+            {s.plannedDistanceKm != null && <StatTile label="Distanse" value={dist(s.plannedDistanceKm)} />}
+            <StatTile label="Dato" value={dateNo(s.date)} />
+          </div>
+          {s.notes && (
+            <p className="muted" style={{ fontStyle: "italic", marginTop: 14, marginBottom: 0, fontSize: 13.5 }}>
+              <i className="fa-regular fa-note-sticky" style={{ marginRight: 7 }} />
+              {s.notes}
+            </p>
+          )}
+        </div>
+      </div>
 
-        {s.notes && <p className="mt-3 text-sm italic text-slate-500">📝 {s.notes}</p>}
-      </Card>
-
-      {/* Klokkeoppsett (AI) */}
-      <Card className="mb-6">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-700">⌚ Slik setter du opp klokka</h3>
-          <div className="flex items-center gap-3">
+      {/* Beskrivelse av økten (AI – med liten klokkedel til slutt) */}
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>
+            <i className="fa-solid fa-circle-info" style={{ color: "var(--primary-500)", marginRight: 9 }} />
+            Beskrivelse av økten
+          </h3>
+          <span className="muted" style={{ fontSize: 12.5 }}>
             {settings.training.watchModel ? (
-              <span className="text-xs text-slate-400">{settings.training.watchModel}</span>
+              <>{settings.training.watchModel} · </>
             ) : (
-              <Link to="/innstillinger" className="text-xs text-brand-600 hover:underline">
-                Legg inn klokkemodell i Innstillinger →
-              </Link>
+              <>
+                <Link to="/innstillinger" className="link">
+                  Legg inn klokke
+                </Link>{" "}
+                ·{" "}
+              </>
             )}
             {tips && !tipsLoading && (
-              <button onClick={regenerateTips} className="text-xs text-slate-400 hover:text-brand-600">
-                ↻ Oppdater
-              </button>
+              <span className="link" onClick={regenerateTips}>
+                <i className="fa-solid fa-arrows-rotate" /> Oppdater
+              </span>
             )}
-          </div>
+          </span>
         </div>
-        {tipsLoading && <p className="text-sm text-slate-400">AI-treneren skriver klokketips…</p>}
-        {tipsError && <p className="text-sm text-rose-500">Kunne ikke hente tips: {tipsError}</p>}
-        {tips && !tipsLoading && (
-          <div className="rounded-xl bg-brand-50/40 p-4">
-            <Markdown>{tips}</Markdown>
-          </div>
-        )}
-      </Card>
+        <div className="card-body">
+          {tipsLoading && (
+            <p className="muted" style={{ margin: 0 }}>
+              <i className="fa-solid fa-arrows-rotate fa-spin" style={{ marginRight: 8 }} />
+              AI-treneren skriver en beskrivelse av økten…
+            </p>
+          )}
+          {tipsError && (
+            <p style={{ color: "var(--error-500)", margin: 0 }}>Kunne ikke hente beskrivelsen: {tipsError}</p>
+          )}
+          {tips && !tipsLoading && <Markdown>{tips}</Markdown>}
+        </div>
+      </div>
 
       {/* Slik ble den (når koblet til gjennomført økt) */}
       {w && (
-        <Card className="mb-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-700">Slik ble den</h3>
-            <Link to={`/okter/${w.id}`} className="text-sm text-brand-600 hover:underline">
+        <div className="card">
+          <div className="card-head">
+            <h3>Slik ble den</h3>
+            <Link to={`/okter/${w.id}`} className="link">
               Full øktdetalj + AI-vurdering →
             </Link>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase text-slate-400">
-                <th className="py-2"></th>
-                <th className="py-2 text-right">Planlagt</th>
-                <th className="py-2 text-right">Faktisk</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t border-slate-50">
-                <td className="py-2 text-slate-500">Distanse</td>
-                <td className="py-2 text-right text-slate-500">{s.plannedDistanceKm ? dist(s.plannedDistanceKm) : "–"}</td>
-                <td className="py-2 text-right font-medium text-slate-700">{dist(w.distanceKm)}</td>
-              </tr>
-              <tr className="border-t border-slate-50">
-                <td className="py-2 text-slate-500">Tempo</td>
-                <td className="py-2 text-right text-slate-500">{paceRange ?? "–"}</td>
-                <td className="py-2 text-right font-medium text-slate-700">
-                  {pace(w.avgPaceSecPerKm)} /km{check(paceOk)}
-                </td>
-              </tr>
-              <tr className="border-t border-slate-50">
-                <td className="py-2 text-slate-500">Puls</td>
-                <td className="py-2 text-right text-slate-500">{hrRange ?? "–"}</td>
-                <td className="py-2 text-right font-medium text-slate-700">
-                  {w.avgHr ? `${w.avgHr} bpm snitt` : "–"}{check(hrOk)}
-                </td>
-              </tr>
-              {inZonePct != null && (
-                <tr className="border-t border-slate-50">
-                  <td className="py-2 text-slate-500">Tid i målsone</td>
-                  <td className="py-2 text-right text-slate-500">mest mulig</td>
-                  <td className="py-2 text-right font-medium text-slate-700">{inZonePct} %</td>
-                </tr>
-              )}
-              <tr className="border-t border-slate-50">
-                <td className="py-2 text-slate-500">Varighet</td>
-                <td className="py-2 text-right text-slate-500">–</td>
-                <td className="py-2 text-right font-medium text-slate-700">{duration(w.durationSec)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </Card>
+          <div className="card-body" style={{ paddingTop: 6 }}>
+            <div
+              className="flex between muted"
+              style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, padding: "6px 0" }}
+            >
+              <span style={{ flex: "0 0 110px" }} />
+              <span style={{ flex: 1, textAlign: "right" }}>Planlagt</span>
+              <span style={{ flex: 1, textAlign: "right" }}>Faktisk</span>
+            </div>
+            {cmp("Distanse", s.plannedDistanceKm != null ? dist(s.plannedDistanceKm) : "–", dist(w.distanceKm))}
+            {cmp(
+              "Tempo",
+              paceRange ?? "–",
+              <>
+                {pace(w.avgPaceSecPerKm)} /km
+                {check(paceOk)}
+              </>
+            )}
+            {cmp(
+              "Puls",
+              hrRange ?? "–",
+              <>
+                {w.avgHr ? `${w.avgHr} bpm snitt` : "–"}
+                {check(hrOk)}
+              </>
+            )}
+            {inZonePct != null && cmp("Tid i målsone", "mest mulig", `${inZonePct} %`)}
+            {cmp("Varighet", "–", duration(w.durationSec))}
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, PlannedSession, Settings, Workout } from "../api/client";
-import { Card, PageTitle, Stat, TypeBadge, StatusBadge, Button, Spinner } from "../components/ui";
-import { dateNo, dist, pace } from "../lib/format";
+import { PageTitle, Spinner, Ring, TypeBadge } from "../components/ui";
+import { dateNo, dist, pace, SESSION_COLORS } from "../lib/format";
 import { SyncButton } from "../components/SyncButton";
 
 function daysUntil(iso: string): number {
@@ -20,6 +20,7 @@ function isoWeek(d: Date): number {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<PlannedSession[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -47,97 +48,219 @@ export default function Dashboard() {
 
   const completed = sessions.filter((s) => s.status === "completed").length;
   const total = sessions.length;
-  const last7 = workouts.filter(
-    (w) => new Date(w.startTime).getTime() > Date.now() - 7 * 86400000
-  );
+  const last7 = workouts.filter((w) => new Date(w.startTime).getTime() > Date.now() - 7 * 86400000);
   const weeklyKm = last7.reduce((sum, w) => sum + (w.distanceKm ?? 0), 0);
+
+  const weekSessions = sessions.filter((s) => isoWeek(new Date(s.date)) === thisWeek);
+  const weekDone = weekSessions.filter((s) => s.status === "completed").length;
+  const weekTotal = weekSessions.length || 3;
+
+  const next = upcoming[0];
+  const raceDays = settings.race.date ? daysUntil(settings.race.date) : null;
+  const phaseName = next?.phaseName ?? sessions.find((s) => s.status !== "completed")?.phaseName ?? "";
 
   return (
     <div>
       <PageTitle
         title="Oversikt"
-        subtitle={`Uke ${thisWeek} · ${settings.race.name}${settings.race.date ? ` ${dateNo(settings.race.date)}` : ""}`}
+        subtitle={`Uke ${thisWeek}${phaseName ? ` · ${phaseName}` : ""}`}
         action={<SyncButton onDone={load} />}
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat
-          label="Dager til løp"
-          value={settings.race.date ? daysUntil(settings.race.date) : "–"}
-          hint={settings.race.date ? dateNo(settings.race.date) : "ikke satt"}
+      {/* Hero countdown */}
+      <div
+        className="card fadein"
+        style={{ background: "var(--bg-rail)", border: "none", color: "#fff", overflow: "hidden", position: "relative", marginBottom: 18 }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            right: -40,
+            top: -40,
+            width: 220,
+            height: 220,
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,128,148,0.35), transparent 70%)",
+          }}
         />
-        <Stat label="Fullførte økter" value={`${completed} / ${total}`} hint="hele programmet" />
-        <Stat label="Siste 7 dager" value={`${weeklyKm.toFixed(1)} km`} hint={`${last7.length} økter`} />
-        <Stat
-          label="Sist synket"
-          value={settings.lastSync ? dateNo(settings.lastSync) : "aldri"}
-          hint="Garmin"
-        />
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 28, padding: "28px 30px", position: "relative" }}>
+          <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+            <div style={{ fontSize: 11, letterSpacing: 1.2, fontWeight: 700, color: "var(--primary-300)", textTransform: "uppercase" }}>
+              Ditt mål
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.5, marginTop: 6 }}>{settings.race.name}</div>
+            {raceDays != null ? (
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 14 }}>
+                <span className="tnum" style={{ fontSize: 58, fontWeight: 800, lineHeight: 0.9, letterSpacing: -2 }}>
+                  {raceDays}
+                </span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.65)" }}>dager igjen</span>
+              </div>
+            ) : (
+              <div style={{ marginTop: 14, color: "rgba(255,255,255,0.65)" }}>Sett løpsdato i Innstillinger</div>
+            )}
+            {settings.race.date && (
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", marginTop: 8 }}>
+                <i className="fa-regular fa-calendar" style={{ marginRight: 7 }} />
+                {dateNo(settings.race.date)}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "grid", placeItems: "center" }}>
+            <Ring pct={total ? completed / total : 0} size={140} stroke={13} color="var(--primary-300)" track="rgba(255,255,255,0.12)">
+              <div style={{ color: "#fff" }}>
+                <div className="tnum" style={{ fontSize: 26, fontWeight: 800 }}>
+                  {completed}
+                  <span style={{ fontSize: 16, color: "rgba(255,255,255,0.5)" }}>/{total}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>økter fullført</div>
+              </div>
+            </Ring>
+          </div>
+
+          <div style={{ flex: "1 1 200px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="flex items-center gap12" style={{ background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 14px" }}>
+              <i className="fa-solid fa-road" style={{ color: "var(--t-langtur)", fontSize: 18 }} />
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{weeklyKm.toFixed(1)} km</div>
+                <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)" }}>siste 7 dager · {last7.length} økter</div>
+              </div>
+            </div>
+            {next ? (
+              <button
+                className="btn btn-primary btn-lg"
+                onClick={() => navigate(`/plan/${next.id}`)}
+                style={{ justifyContent: "space-between" }}
+              >
+                <span>
+                  <i className="fa-solid fa-play" style={{ marginRight: 8 }} />
+                  Neste økt: {next.title}
+                </span>
+                <i className="fa-solid fa-arrow-right" />
+              </button>
+            ) : (
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Ingen planlagte økter framover.</div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Card>
-          <h2 className="mb-4 font-semibold text-slate-700">Kommende økter</h2>
-          {upcoming.length === 0 ? (
-            <p className="text-sm text-slate-400">Ingen planlagte økter framover.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {upcoming.map((s) => (
-                <Link
-                  key={s.id}
-                  to={`/plan/${s.id}`}
-                  className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 transition hover:bg-brand-50/60"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <TypeBadge type={s.type} />
-                      <span className="text-xs text-slate-400">{dateNo(s.date)}</span>
-                    </div>
-                    <div className="mt-1 text-sm font-medium text-slate-700">{s.title}</div>
-                  </div>
-                  <span className="text-xs text-slate-400">{s.targetZone} ›</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </Card>
+      {/* Stat tiles */}
+      <div className="grid g4 stats-grid" style={{ marginBottom: 18 }}>
+        <div className="stat fadein">
+          <div className="ico" style={{ background: "var(--primary-50)", color: "var(--primary-500)" }}>
+            <i className="fa-solid fa-bullseye" />
+          </div>
+          <div className="label">Ukens mål</div>
+          <div className="val tnum">
+            {weekDone}
+            <small> / {weekTotal} økter</small>
+          </div>
+          <div style={{ height: 6, borderRadius: 99, background: "var(--grey-200)", marginTop: 10, overflow: "hidden" }}>
+            <div style={{ width: `${Math.min(100, (weekDone / weekTotal) * 100)}%`, height: "100%", background: "var(--primary-500)", borderRadius: 99 }} />
+          </div>
+        </div>
+        <div className="stat fadein">
+          <div className="ico" style={{ background: "var(--t-fullfort-bg)", color: "var(--t-fullfort)" }}>
+            <i className="fa-solid fa-circle-check" />
+          </div>
+          <div className="label">Fullførte økter</div>
+          <div className="val tnum">
+            {completed}
+            <small> / {total}</small>
+          </div>
+          <div className="foot">hele programmet</div>
+        </div>
+        <div className="stat fadein">
+          <div className="ico" style={{ background: "var(--t-langtur-bg)", color: "var(--t-langtur)" }}>
+            <i className="fa-solid fa-road" />
+          </div>
+          <div className="label">Siste 7 dager</div>
+          <div className="val tnum">
+            {weeklyKm.toFixed(1)}
+            <small> km</small>
+          </div>
+          <div className="foot">{last7.length} økter</div>
+        </div>
+        <div className="stat fadein">
+          <div className="ico" style={{ background: "var(--info-50)", color: "var(--info-500)" }}>
+            <i className="fa-solid fa-arrows-rotate" />
+          </div>
+          <div className="label">Sist synket</div>
+          <div className="val" style={{ fontSize: 20 }}>
+            {settings.lastSync ? dateNo(settings.lastSync) : "aldri"}
+          </div>
+          <div className="foot">Garmin</div>
+        </div>
+      </div>
 
-        <Card>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-700">Siste økter</h2>
-            <Link to="/okter" className="text-sm text-brand-600 hover:underline">
-              Se alle
+      {/* Two columns */}
+      <div className="grid g2">
+        <div className="card">
+          <div className="card-head">
+            <h3>Kommende økter</h3>
+            <Link to="/kalender" className="link">
+              Kalender →
             </Link>
           </div>
-          {workouts.length === 0 ? (
-            <p className="text-sm text-slate-400">
-              Ingen importerte økter ennå. Trykk «Synk med Garmin».
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {workouts.slice(0, 5).map((w) => (
-                <Link
+          <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {upcoming.length === 0 ? (
+              <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>Ingen planlagte økter framover.</p>
+            ) : (
+              upcoming.map((s) => (
+                <div key={s.id} className="srow fadein" onClick={() => navigate(`/plan/${s.id}`)}>
+                  <span className="accent" style={{ background: SESSION_COLORS[s.type] }} />
+                  <div className="s-main">
+                    <div className="flex items-center gap8" style={{ marginBottom: 4 }}>
+                      <TypeBadge type={s.type} />
+                      <span className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>{dateNo(s.date)}</span>
+                    </div>
+                    <div className="s-title">{s.title}</div>
+                  </div>
+                  <div className="s-zone hide-m">{s.targetZone}</div>
+                  <i className="fa-solid fa-chevron-right chev" />
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head">
+            <h3>Siste økter</h3>
+            <Link to="/okter" className="link">
+              Se alle →
+            </Link>
+          </div>
+          <div className="card-body" style={{ padding: "8px 12px" }}>
+            {workouts.length === 0 ? (
+              <p className="muted" style={{ margin: "10px", fontSize: 13.5 }}>
+                Ingen importerte økter ennå. Trykk «Synk med Garmin».
+              </p>
+            ) : (
+              workouts.slice(0, 5).map((w) => (
+                <div
                   key={w.id}
-                  to={`/okter/${w.id}`}
-                  className="flex items-center justify-between rounded-xl px-4 py-3 hover:bg-slate-50"
+                  className="flex items-center between"
+                  style={{ padding: "11px 10px", borderBottom: "1px solid var(--border-subtle)", cursor: "pointer", borderRadius: 8 }}
+                  onClick={() => navigate(`/okter/${w.id}`)}
                 >
                   <div>
-                    <div className="text-sm font-medium text-slate-700">
-                      {w.name || w.sport || "Løp"}
-                    </div>
-                    <div className="text-xs text-slate-400">{dateNo(w.startTime)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{w.name || w.sport || "Løp"}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{dateNo(w.startTime)}</div>
                   </div>
-                  <div className="text-right text-sm">
-                    <div className="font-medium text-slate-700">{dist(w.distanceKm)}</div>
-                    <div className="text-xs text-slate-400">
+                  <div style={{ textAlign: "right" }}>
+                    <div className="tnum" style={{ fontSize: 15, fontWeight: 800 }}>{dist(w.distanceKm)}</div>
+                    <div className="muted tnum" style={{ fontSize: 12 }}>
                       {pace(w.avgPaceSecPerKm)} · {w.avgHr ?? "–"} bpm
                     </div>
                   </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </Card>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

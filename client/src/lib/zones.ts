@@ -33,7 +33,8 @@ export function zoneForHr(hr: number, zones: Zone[]): number {
   return 5;
 }
 
-export const ZONE_COLORS = ["#cbd5e1", "#38bdf8", "#34d399", "#fbbf24", "#f43f5e"];
+// Sone-farger (matcher design.css --z1..--z5)
+export const ZONE_COLORS = ["#9AA3A8", "#2F8FB0", "#0E8540", "#E5A300", "#D7263D"];
 
 /** Beregn sekunder i hver sone fra en pulsstrøm (med tidsstempel t i sekunder). */
 export function zoneSecondsFromStreams(

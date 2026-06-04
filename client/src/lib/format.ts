@@ -31,11 +31,12 @@ export function dateShort(iso: string): string {
   return new Date(iso).toLocaleDateString("no-NO", { day: "numeric", month: "short" });
 }
 
+// Sporty-Plania accents (matcher design.css --t-*)
 export const SESSION_COLORS: Record<string, string> = {
-  easy: "#38bdf8", // sky-400
-  quality: "#fb923c", // orange-400
-  long: "#a78bfa", // violet-400
-  race: "#f43f5e", // rose-500
+  easy: "#2F8FB0", // rolig / aerob
+  quality: "#E59B2E", // kvalitet
+  long: "#7A52CC", // langtur
+  race: "#D7263D", // løp
 };
 
 export const SESSION_LABELS: Record<string, string> = {
@@ -43,6 +44,14 @@ export const SESSION_LABELS: Record<string, string> = {
   quality: "Kvalitet",
   long: "Langtur",
   race: "Løp",
+};
+
+// Mapper øktas type-nøkkel (DB) til design.css chip-klassesuffiks
+export const TYPE_DESIGN: Record<string, string> = {
+  easy: "rolig",
+  quality: "kvalitet",
+  long: "langtur",
+  race: "lop",
 };
 
 export const WEEKDAYS = [

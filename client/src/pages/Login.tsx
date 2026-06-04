@@ -22,42 +22,35 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-slate-100 px-4">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl shadow-slate-200/60"
-      >
-        <div className="mb-6 text-center">
-          <div className="text-4xl">🏃</div>
-          <h1 className="mt-2 text-xl font-bold text-slate-800">Run Assi, run!</h1>
-          <p className="text-sm text-slate-400">Logg inn for å fortsette</p>
+    <div className="login-bg">
+      <div className="card login-card fadein">
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 24 }}>
+          <div className="mark" style={{ width: 54, height: 54, fontSize: 25, borderRadius: 16 }}>
+            <i className="fa-solid fa-person-running" />
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 23, fontWeight: 800, letterSpacing: -0.5 }}>Run, run!</div>
+            <div className="muted" style={{ fontSize: 14, marginTop: 2 }}>Logg inn for å fortsette</div>
+          </div>
         </div>
-        <label className="mb-3 block">
-          <span className="text-sm font-medium text-slate-600">E-post / brukernavn</span>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-            autoFocus
-          />
-        </label>
-        <label className="mb-5 block">
-          <span className="text-sm font-medium text-slate-600">Passord</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          />
-        </label>
-        {error && <p className="mb-4 text-sm text-rose-500">{error}</p>}
-        <button
-          disabled={loading}
-          className="w-full rounded-xl bg-brand-600 py-2.5 font-medium text-white transition hover:bg-brand-700 disabled:opacity-60"
-        >
-          {loading ? "Logger inn…" : "Logg inn"}
-        </button>
-      </form>
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="field">
+            <label>E-post / brukernavn</label>
+            <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+          </div>
+          <div className="field">
+            <label>Passord</label>
+            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {error && <p style={{ color: "var(--error-500)", fontSize: 13.5, margin: 0 }}>{error}</p>}
+          <button className="btn btn-primary btn-lg" type="submit" disabled={loading} style={{ marginTop: 4 }}>
+            {loading ? "Logger inn…" : "Logg inn"} <i className="fa-solid fa-arrow-right" />
+          </button>
+        </form>
+      </div>
+      <div className="muted" style={{ marginTop: 20, fontSize: 12.5, textAlign: "center" }}>
+        AI-løpetrener · mot ditt neste løp
+      </div>
     </div>
   );
 }

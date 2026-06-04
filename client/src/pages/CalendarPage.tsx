@@ -33,8 +33,7 @@ export default function CalendarPage() {
   }
 
   function onClick(info: EventClickArg) {
-    const workoutId = info.event.extendedProps.workoutId as number | null;
-    if (workoutId) navigate(`/okter/${workoutId}`);
+    navigate(`/plan/${info.event.id}`);
   }
 
   if (loading) return <Spinner />;
@@ -46,8 +45,8 @@ export default function CalendarPage() {
       title: s.title,
       start: s.date.slice(0, 10),
       allDay: true,
-      backgroundColor: done ? "#10b981" : SESSION_COLORS[s.type],
-      borderColor: done ? "#10b981" : SESSION_COLORS[s.type],
+      backgroundColor: done ? "#0E8540" : SESSION_COLORS[s.type],
+      borderColor: done ? "#0E8540" : SESSION_COLORS[s.type],
       extendedProps: { type: s.type, status: s.status, workoutId: s.workoutId ?? null },
     };
   });
@@ -67,7 +66,7 @@ export default function CalendarPage() {
           </span>
         ))}
         <span className="flex items-center gap-1.5 text-xs text-slate-500">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#0E8540" }} />
           Fullført
         </span>
       </div>

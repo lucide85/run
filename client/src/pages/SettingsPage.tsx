@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Settings } from "../api/client";
-import { Card, PageTitle, Spinner, Button } from "../components/ui";
+import { PageTitle, Spinner, Button } from "../components/ui";
 import { WEEKDAYS, dateNo } from "../lib/format";
 import { computeZones, ZONE_COLORS } from "../lib/zones";
 
@@ -46,6 +46,7 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
     try {
       const r = await api.updateSettings({ days, maxHr, restHr, watchModel });
       setMsg(r.regenerated ? "Lagret – datoer i programmet er oppdatert." : "Lagret.");
+      onChange();
       await load();
     } catch (e) {
       setMsg(`Feil: ${(e as Error).message}`);
@@ -103,187 +104,206 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
 
   if (!settings) return <Spinner />;
 
-  return (
-    <div className="max-w-2xl">
-      <PageTitle title="Innstillinger" />
+  const zones = computeZones(maxHr, restHr);
+  const hrr = maxHr - restHr;
 
-      <Card className="mb-6">
-        <h3 className="mb-1 font-semibold text-slate-700">Treningsdager</h3>
-        <p className="mb-4 text-sm text-slate-400">
-          Velg tre faste dager. Programmet fordeler de tre øktene (rolig, kvalitet, langtur) på disse.
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <PageTitle
+        title="Innstillinger"
+        subtitle="Tilpass programmet og pulssonene dine"
+        action={
+          <Button onClick={save} disabled={saving || days.length !== 3}>
+            <i className={`fa-solid ${saving ? "fa-arrows-rotate fa-spin" : "fa-floppy-disk"}`} />
+            {saving ? "Lagrer…" : "Lagre"}
+          </Button>
+        }
+      />
+      {msg && (
+        <p className="muted" style={{ marginTop: -14, marginBottom: 18, fontSize: 13.5 }}>
+          {msg}
         </p>
-        <div className="flex flex-wrap gap-2">
-          {WEEKDAYS.map((d) => {
-            const active = days.includes(d.key);
-            return (
-              <button
-                key={d.key}
-                onClick={() => toggleDay(d.key)}
-                className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-                  active ? "bg-brand-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
+      )}
+
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Treningsdager</h3>
+        </div>
+        <div className="card-body">
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 0, marginBottom: 14 }}>
+            Velg tre faste dager. Programmet fordeler de tre øktene (rolig, kvalitet, langtur) på disse.
+          </p>
+          <div className="daytoggle">
+            {WEEKDAYS.map((d) => (
+              <button key={d.key} className={days.includes(d.key) ? "on" : ""} onClick={() => toggleDay(d.key)}>
                 {d.label}
               </button>
-            );
-          })}
+            ))}
+          </div>
+          <div className="muted" style={{ fontSize: 12.5, marginTop: 12, fontWeight: 600 }}>{days.length}/3 valgt</div>
         </div>
-        <p className="mt-2 text-xs text-slate-400">{days.length}/3 valgt</p>
-      </Card>
+      </div>
 
-      <Card className="mb-6">
-        <h3 className="mb-4 font-semibold text-slate-700">Puls (Karvonen)</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <label className="block">
-            <span className="text-sm text-slate-600">Makspuls</span>
-            <input
-              type="number"
-              value={maxHr}
-              onChange={(e) => setMaxHr(Number(e.target.value))}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm text-slate-600">Hvilepuls</span>
-            <input
-              type="number"
-              value={restHr}
-              onChange={(e) => setRestHr(Number(e.target.value))}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-            />
-          </label>
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Puls (Karvonen)</h3>
         </div>
-      </Card>
+        <div className="card-body">
+          <div className="grid g2">
+            <div className="field">
+              <label>Makspuls</label>
+              <input className="input" type="number" value={maxHr} onChange={(e) => setMaxHr(Number(e.target.value) || 0)} />
+            </div>
+            <div className="field">
+              <label>Hvilepuls</label>
+              <input className="input" type="number" value={restHr} onChange={(e) => setRestHr(Number(e.target.value) || 0)} />
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <Card className="mb-6">
-        <h3 className="mb-1 font-semibold text-slate-700">Pulsklokke</h3>
-        <p className="mb-3 text-sm text-slate-400">
-          Hvilken klokke bruker du? AI-treneren bruker dette til å gi presise oppsettstips for hver økt.
-        </p>
-        <input
-          value={watchModel}
-          onChange={(e) => setWatchModel(e.target.value)}
-          placeholder="F.eks. Garmin Forerunner 255"
-          className="w-full rounded-xl border border-slate-200 px-3 py-2"
-        />
-      </Card>
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Pulsklokke</h3>
+        </div>
+        <div className="card-body">
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 0, marginBottom: 14 }}>
+            Hvilken klokke bruker du? AI-treneren bruker dette til å gi presise oppsettstips for hver økt.
+          </p>
+          <input className="input" value={watchModel} onChange={(e) => setWatchModel(e.target.value)} placeholder="F.eks. Garmin Forerunner 255" />
+        </div>
+      </div>
 
-      <Card className="mb-6">
-        <h3 className="mb-1 font-semibold text-slate-700">Pulssoner (Karvonen)</h3>
-        <p className="mb-4 text-sm text-slate-400">
-          Beregnet ut fra makspuls {maxHr} og hvilepuls {restHr}. Oppdateres når du endrer verdiene over.
-        </p>
-        <div className="space-y-1.5">
-          {computeZones(maxHr, restHr).map((z) => (
-            <div key={z.zone} className="flex items-center gap-3 text-sm">
-              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: ZONE_COLORS[z.zone - 1] }} />
-              <span className="w-8 font-medium text-slate-600">S{z.zone}</span>
-              <span className="text-slate-400">{z.name}</span>
-              <span className="ml-auto tabular-nums font-medium text-slate-700">
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Pulssoner (Karvonen)</h3>
+        </div>
+        <div className="card-body">
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 0, marginBottom: 8 }}>
+            Beregnet ut fra makspuls {maxHr} og hvilepuls {restHr}. Oppdateres når du endrer verdiene over.
+          </p>
+          {zones.map((z) => (
+            <div key={z.zone} className="flex items-center" style={{ padding: "11px 0", borderBottom: "1px solid var(--border-subtle)", gap: 14 }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: ZONE_COLORS[z.zone - 1], flexShrink: 0 }} />
+              <b style={{ fontSize: 13.5, width: 26 }}>S{z.zone}</b>
+              <span style={{ fontSize: 14, flex: 1 }}>{z.name}</span>
+              <div style={{ flex: "1 1 120px", maxWidth: 200 }} className="hide-m">
+                <div style={{ height: 7, borderRadius: 99, background: "var(--grey-150)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", borderRadius: 99, background: ZONE_COLORS[z.zone - 1], width: `${hrr > 0 ? ((z.max - restHr) / hrr) * 100 : 0}%` }} />
+                </div>
+              </div>
+              <span className="tnum" style={{ fontSize: 13.5, fontWeight: 700, width: 110, textAlign: "right" }}>
                 {z.min}–{z.max} bpm
               </span>
             </div>
           ))}
         </div>
-      </Card>
-
-      <div className="mb-8 flex items-center gap-3">
-        <Button onClick={save} disabled={saving || days.length !== 3}>
-          {saving ? "Lagrer…" : "Lagre"}
-        </Button>
-        {msg && <span className="text-sm text-slate-500">{msg}</span>}
       </div>
 
-      <Card className="mb-6">
-        <h3 className="mb-3 font-semibold text-slate-700">Løp</h3>
-        <div className="text-sm text-slate-600">
-          {settings.race.name}
-          {settings.race.date ? ` – ${dateNo(settings.race.date)}` : " – dato ikke satt"}
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Løp</h3>
         </div>
-      </Card>
+        <div className="card-body">
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 0, marginBottom: 10 }}>Målløpet ditt — driver nedtellingen og hele planen.</p>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>
+            {settings.race.name}
+            {settings.race.date ? ` – ${dateNo(settings.race.date)}` : " – dato ikke satt"}
+          </div>
+        </div>
+      </div>
 
-      <Card className="mb-6">
-        <h3 className="mb-1 font-semibold text-slate-700">Treningsplan</h3>
-        <p className="mb-3 text-sm text-slate-400">
-          La AI-treneren lage en ny, tilpasset plan ut fra oppdaterte mål eller form.
-        </p>
-        <Link to="/onboarding">
-          <Button variant="soft">✨ Regenerer plan med AI</Button>
-        </Link>
-      </Card>
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Treningsplan</h3>
+        </div>
+        <div className="card-body">
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 0, marginBottom: 12 }}>
+            La AI-treneren lage en ny, tilpasset plan ut fra oppdaterte mål eller form.
+          </p>
+          <Link to="/onboarding" className="btn btn-ai">
+            <i className="fa-solid fa-wand-magic-sparkles" />
+            Regenerer plan med AI
+          </Link>
+        </div>
+      </div>
 
-      <Card className="mb-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-700">Garmin Connect</h3>
-          <span className="text-xs text-slate-400">
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Garmin Connect</h3>
+          <span className="muted" style={{ fontSize: 12 }}>
             {settings.garminConnected ? "Tilkoblet ✓" : "Ikke tilkoblet"}
             {settings.lastSync ? ` · sist synket ${dateNo(settings.lastSync)}` : ""}
           </span>
         </div>
-        {settings.garminConnected ? (
-          <Button variant="ghost" onClick={disconnectGarmin}>
-            Koble fra Garmin
-          </Button>
-        ) : mfaNeeded ? (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              Garmin-kontoen har to-faktor. Skriv inn sikkerhetskoden du fikk på e-post/SMS/app.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && mfaCode && !gBusy && submitMfa()}
-                placeholder="Sikkerhetskode"
-                inputMode="numeric"
-                autoFocus
-                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 tracking-widest"
-              />
-              <Button onClick={submitMfa} disabled={!mfaCode || gBusy}>
-                {gBusy ? "Logger inn…" : "Bekreft kode"}
-              </Button>
+        <div className="card-body">
+          {settings.garminConnected ? (
+            <Button variant="ghost" onClick={disconnectGarmin}>
+              Koble fra Garmin
+            </Button>
+          ) : mfaNeeded ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: 14, margin: 0 }}>
+                Garmin-kontoen har to-faktor. Skriv inn sikkerhetskoden du fikk på e-post/SMS/app.
+              </p>
+              <div className="flex gap12 wrap">
+                <input
+                  className="input"
+                  style={{ flex: "1 1 180px", letterSpacing: "0.2em" }}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && mfaCode && !gBusy && submitMfa()}
+                  placeholder="Sikkerhetskode"
+                  inputMode="numeric"
+                  autoFocus
+                />
+                <Button onClick={submitMfa} disabled={!mfaCode || gBusy}>
+                  {gBusy ? "Logger inn…" : "Bekreft kode"}
+                </Button>
+              </div>
+              <span
+                className="link muted"
+                style={{ fontSize: 12.5 }}
+                onClick={() => {
+                  setMfaNeeded(false);
+                  setMfaCode("");
+                  setGMsg("");
+                }}
+              >
+                Avbryt
+              </span>
             </div>
-            <button
-              onClick={() => {
-                setMfaNeeded(false);
-                setMfaCode("");
-                setGMsg("");
-              }}
-              className="text-xs text-slate-400 hover:text-brand-600"
-            >
-              Avbryt
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-400">
-              Logg inn med din Garmin-konto for å hente treningsøktene dine automatisk. Passordet lagres kryptert.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                value={gEmail}
-                onChange={(e) => setGEmail(e.target.value)}
-                placeholder="Garmin e-post"
-                className="flex-1 rounded-xl border border-slate-200 px-3 py-2"
-              />
-              <input
-                type="password"
-                value={gPw}
-                onChange={(e) => setGPw(e.target.value)}
-                placeholder="Garmin passord"
-                className="flex-1 rounded-xl border border-slate-200 px-3 py-2"
-              />
-              <Button onClick={connectGarmin} disabled={!gEmail || !gPw || gBusy}>
-                {gBusy ? "Logger inn…" : "Koble til"}
-              </Button>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p className="muted" style={{ fontSize: 13.5, margin: 0 }}>
+                Logg inn med din Garmin-konto for å hente treningsøktene dine automatisk. Passordet lagres kryptert.
+              </p>
+              <div className="flex gap12 wrap">
+                <input className="input" style={{ flex: "1 1 180px" }} value={gEmail} onChange={(e) => setGEmail(e.target.value)} placeholder="Garmin e-post" />
+                <input
+                  className="input"
+                  style={{ flex: "1 1 180px" }}
+                  type="password"
+                  value={gPw}
+                  onChange={(e) => setGPw(e.target.value)}
+                  placeholder="Garmin passord"
+                />
+                <Button onClick={connectGarmin} disabled={!gEmail || !gPw || gBusy}>
+                  {gBusy ? "Logger inn…" : "Koble til"}
+                </Button>
+              </div>
+              <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+                Har kontoen to-faktor (MFA)? Det støttes nå – du blir bedt om koden etter at du trykker «Koble til».
+              </p>
             </div>
-            <p className="text-xs text-slate-400">
-              Har kontoen to-faktor (MFA)? Det støttes nå – du blir bedt om koden etter at du trykker «Koble til».
+          )}
+          {gMsg && (
+            <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}>
+              {gMsg}
             </p>
-          </div>
-        )}
-        {gMsg && <p className="mt-2 text-sm text-slate-500">{gMsg}</p>}
-      </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

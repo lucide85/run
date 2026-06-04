@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,32 +6,36 @@
   color-scheme: light;
 }
 
-html,
-body,
-#root {
-  height: 100%;
-}
+/* body-bakgrunn/font settes i design.css (Sporty-Plania) */
 
-body {
-  @apply bg-slate-50 text-slate-800 antialiased;
-}
-
-/* FullCalendar – lyst, moderne uttrykk */
+/* FullCalendar – Sporty-Plania uttrykk */
 .fc {
-  --fc-border-color: #e2e8f0;
-  --fc-today-bg-color: #eff6ff;
+  --fc-border-color: var(--border-subtle, #ECEDEE);
+  --fc-today-bg-color: var(--primary-50, #F3FBFC);
   --fc-page-bg-color: #ffffff;
+  font-family: var(--font-sans);
 }
 .fc .fc-toolbar-title {
-  @apply text-lg font-semibold text-slate-700;
+  @apply text-lg font-bold;
+  color: var(--fg-primary);
+  text-transform: capitalize;
 }
 .fc .fc-button {
-  @apply bg-white border border-slate-200 text-slate-600 shadow-sm capitalize;
+  background: #fff;
+  border: 1px solid var(--border-default);
+  color: var(--fg-secondary);
+  box-shadow: var(--shadow-1);
+  text-transform: capitalize;
+  font-weight: 600;
+  border-radius: 10px;
 }
 .fc .fc-button-primary:not(:disabled).fc-button-active,
 .fc .fc-button-primary:not(:disabled):active {
-  @apply bg-brand-600 border-brand-600 text-white;
+  background: var(--primary-500);
+  border-color: var(--primary-500);
+  color: #fff;
 }
+.fc .fc-col-header-cell-cushion { color: var(--fg-secondary); font-weight: 700; }
 .fc-event {
   @apply cursor-pointer border-0 text-xs font-medium;
 }
