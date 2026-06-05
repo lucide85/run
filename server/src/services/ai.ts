@@ -211,33 +211,48 @@ ${
 }
 
 export interface PlanAdjustmentProposal {
-  summary: string;
+  /** Markdown: formvurdering (foran/på sporet/bak forventet) + generell begrunnelse for endringene. */
+  evaluation: string;
   changes: {
     sessionId: number;
     field: "description" | "title" | "date";
     before: string;
     after: string;
+    /** Kort, konkret hva som endres i denne økten. */
+    change: string;
+    /** Hvorfor nettopp denne økten endres. */
     reason: string;
   }[];
 }
 
-/** Foreslå justeringer av kommende økter basert på progresjon. */
+/**
+ * Vurder hele treningsperioden (planlagt vs. faktisk) og foreslå tilpasninger av
+ * kommende økter. `periodHistory` er en planlagt-vs-faktisk-sammenligning for perioden.
+ */
 export async function proposePlanAdjustment(
   user: User,
   upcoming: PlannedSession[],
-  recentHistory: string
+  periodHistory: string
 ): Promise<PlanAdjustmentProposal> {
   const upcomingText = upcoming
-    .map((s) => `#${s.id} (uke ${s.week}, ${s.date.toISOString().slice(0, 10)}): ${s.title} — ${s.description}`)
+    .map(
+      (s) =>
+        `#${s.id} (uke ${s.week}, ${s.date.toISOString().slice(0, 10)}, ${s.type}): ${s.title} — ${s.description}` +
+        `${s.targetZone ? ` [mål: ${s.targetZone}]` : ""}${s.plannedDistanceKm ? ` [${s.plannedDistanceKm} km]` : ""}`
+    )
     .join("\n");
 
   const tool: Anthropic.Tool = {
     name: "propose_plan_changes",
-    description: "Foreslå konkrete justeringer av kommende økter.",
+    description: "Vurder formen mot planen og foreslå konkrete justeringer av kommende økter.",
     input_schema: {
       type: "object",
       properties: {
-        summary: { type: "string", description: "Kort begrunnelse på norsk (1-3 setninger)." },
+        evaluation: {
+          type: "string",
+          description:
+            "Markdown på norsk. (1) Vurder formen min mot det som var planlagt/forventet i perioden – ligger jeg FORAN, PÅ SPORET eller BAK, og hvorfor ser du det (vis til faktiske tall mot planlagte)? (2) Gi en generell begrunnelse for OM planen bør endres, og i så fall HVORDAN den endres på overordnet nivå. Vær ærlig og konkret, men oppmuntrende. 2–5 setninger, gjerne et par punkter.",
+        },
         changes: {
           type: "array",
           items: {
@@ -247,32 +262,43 @@ export async function proposePlanAdjustment(
               field: { type: "string", enum: ["description", "title", "date"] },
               before: { type: "string" },
               after: { type: "string" },
-              reason: { type: "string" },
+              change: {
+                type: "string",
+                description:
+                  "Kort, konkret hva som endres i klartekst. F.eks. «Øker langturen fra 6 → 7 km» eller «Senker måltempo til 6:30/km».",
+              },
+              reason: { type: "string", description: "Kort hvorfor nettopp denne økten endres." },
             },
-            required: ["sessionId", "field", "before", "after", "reason"],
+            required: ["sessionId", "field", "before", "after", "change", "reason"],
           },
         },
       },
-      required: ["summary", "changes"],
+      required: ["evaluation", "changes"],
     },
   };
 
   const resp = await getClient().messages.create({
     model: model(),
-    max_tokens: 1500,
+    max_tokens: 2000,
     system: systemBlocks(user),
     tools: [tool],
     tool_choice: { type: "tool", name: "propose_plan_changes" },
     messages: [
       {
         role: "user",
-        content: `Vurder progresjonen min og foreslå eventuelle tilpasninger av de kommende øktene. Vær konservativ — endre bare det som gir tydelig mening (f.eks. justere tempo/distanse hvis jeg ligger foran/bak, eller flytte en økt hvis jeg har hoppet over flere). Hvis alt ser bra ut, returner en tom changes-liste.
+        content: `Vurder treningsperioden min så langt og foreslå eventuelle tilpasninger av de kommende øktene.
+
+GJØR SLIK:
+1) Sammenlign det jeg FAKTISK har gjort med det som var PLANLAGT/forventet i perioden – tempo, puls/sone, distanse, og om økter er hoppet over.
+2) Skriv en kort, ærlig vurdering i "evaluation": ligger formen min foran, på sporet eller bak det forventede – og hvorfor? Gi så en generell begrunnelse for om planen bør endres, og i så fall hvordan (overordnet).
+3) Foreslå konkrete endringer KUN der det gir tydelig mening (juster tempo/distanse hvis jeg ligger foran/bak, flytt eller endre en økt hvis jeg har hoppet over flere). Vær konservativ og skadeforebyggende. Hvis alt ser bra ut, returner en tom changes-liste – men gi ALLTID en evaluation.
+4) For hver endring: sett "change" til en kort, konkret beskrivelse av hva som endres, og "reason" til hvorfor.
 
 KOMMENDE ØKTER:
-${upcomingText}
+${upcomingText || "(ingen kommende økter)"}
 
-SISTE GJENNOMFØRTE ØKTER:
-${recentHistory || "(ingen ennå)"}`,
+TRENINGSHISTORIKK I PERIODEN (planlagt vs. faktisk):
+${periodHistory || "(ingen gjennomførte økter ennå)"}`,
       },
     ],
   });
@@ -282,7 +308,7 @@ ${recentHistory || "(ingen ennå)"}`,
       return block.input as PlanAdjustmentProposal;
     }
   }
-  return { summary: "Ingen endringer foreslått.", changes: [] };
+  return { evaluation: "Fikk ikke vurdert planen denne gangen. Prøv igjen.", changes: [] };
 }
 
 function textOf(resp: Anthropic.Message): string {

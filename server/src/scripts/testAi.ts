@@ -40,10 +40,10 @@ async function main() {
     take: 6,
   });
   const proposal = await proposePlanAdjustment(admin, upcoming, history);
-  console.log("Sammendrag:", proposal.summary);
+  console.log("Vurdering:", proposal.evaluation);
   console.log("Antall foreslåtte endringer:", proposal.changes.length);
   for (const c of proposal.changes) {
-    console.log(`  #${c.sessionId} ${c.field}: "${c.before}" → "${c.after}" (${c.reason})`);
+    console.log(`  #${c.sessionId} ${c.field}: ${c.change} — "${c.before}" → "${c.after}" (${c.reason})`);
   }
 
   console.log("\n✅ Alle tre AI-funksjonene svarte uten feil.");

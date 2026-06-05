@@ -1,4 +1,5 @@
-// Hele 17-ukers programmet, kodet fra treningsprogram-10km.md.
+// Standard basisprogram (mal), kodet fra treningsprogram-10km.md. Brukes som utgangspunkt
+// når en bruker ikke har en egen AI-generert plan; lengden tilpasses ellers per bruker.
 // Pulssoner (Karvonen, makspuls 195 / hvilepuls 50) og måltempo hentes fra programmets tabeller.
 
 export type SessionType = "easy" | "quality" | "long" | "race";

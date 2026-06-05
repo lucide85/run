@@ -116,12 +116,14 @@ export interface SyncResult {
 }
 
 export interface PlanProposal {
-  summary: string;
+  /** Markdown: formvurdering + generell begrunnelse for endringene. */
+  evaluation: string;
   changes: {
     sessionId: number;
     field: "description" | "title" | "date";
     before: string;
     after: string;
+    change: string;
     reason: string;
   }[];
 }

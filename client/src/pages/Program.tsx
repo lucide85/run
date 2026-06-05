@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, PlannedSession, PlanProposal } from "../api/client";
 import { PageTitle, Button, Spinner, TypeBadge, StatusBadge } from "../components/ui";
+import { Markdown } from "../components/Markdown";
 import { dateShort, dist, pace, SESSION_COLORS } from "../lib/format";
 
 const PHASE_NAMES: Record<number, string> = {
@@ -55,11 +56,28 @@ export default function Program() {
   const weeks = [...byWeek.keys()].sort((a, b) => a - b);
   let lastPhase = 0;
 
+  // Dynamisk undertittel – utledes fra brukerens egen plan (ikke hardkodet lengde).
+  const perWeekCounts = weeks.map((w) => byWeek.get(w)!.filter((s) => s.type !== "race").length).filter((n) => n > 0);
+  const perWeek = perWeekCounts.length
+    ? perWeekCounts.sort(
+        (a, b) =>
+          perWeekCounts.filter((v) => v === b).length - perWeekCounts.filter((v) => v === a).length
+      )[0]
+    : 0;
+  const raceKm = sessions.find((s) => s.type === "race")?.plannedDistanceKm ?? null;
+  const subtitle = [
+    weeks.length ? `${weeks.length} ${weeks.length === 1 ? "uke" : "uker"}` : null,
+    perWeek ? `${perWeek} ${perWeek === 1 ? "økt" : "økter"} i uken` : null,
+    raceKm ? `mot ${raceKm % 1 === 0 ? raceKm : raceKm.toFixed(1)} km` : "din personlige plan",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div>
       <PageTitle
         title="Treningsprogram"
-        subtitle="17 uker · 3 økter i uken · mot 10 km"
+        subtitle={subtitle}
         action={
           <Button variant="ai" onClick={propose} disabled={proposing}>
             <i className={`fa-solid ${proposing ? "fa-arrows-rotate fa-spin" : "fa-wand-magic-sparkles"}`} />
@@ -73,24 +91,48 @@ export default function Program() {
           <div className="card-body">
             <h3 style={{ margin: 0, fontWeight: 700 }}>
               <i className="fa-solid fa-wand-magic-sparkles" style={{ color: "var(--t-langtur)", marginRight: 8 }} />
-              Forslag fra AI
+              AI-vurdering av planen
             </h3>
-            <p style={{ marginTop: 8 }}>{proposal.summary}</p>
+
+            <div style={{ marginTop: 10 }}>
+              <Markdown>{proposal.evaluation}</Markdown>
+            </div>
+
             {proposal.changes.length === 0 ? (
-              <p style={{ color: "var(--t-fullfort)", fontWeight: 600 }}>Ingen endringer foreslått – planen ser bra ut. 👍</p>
+              <p style={{ color: "var(--t-fullfort)", fontWeight: 600, marginTop: 12 }}>
+                Ingen endringer foreslått – planen ser bra ut. 👍
+              </p>
             ) : (
-              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-                {proposal.changes.map((c, i) => (
-                  <li key={i} style={{ background: "var(--grey-50)", borderRadius: 12, padding: 12, fontSize: 13.5 }}>
-                    <div style={{ fontWeight: 700 }}>
-                      Økt #{c.sessionId} · {c.field}
-                    </div>
-                    <div className="muted" style={{ textDecoration: "line-through" }}>{c.before}</div>
-                    <div>→ {c.after}</div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{c.reason}</div>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <div className="sec-label" style={{ margin: "18px 0 10px" }}>
+                  Foreslåtte endringer ({proposal.changes.length})
+                </div>
+                <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {proposal.changes.map((c, i) => {
+                    const sess = sessions.find((s) => s.id === c.sessionId);
+                    return (
+                      <li key={i} style={{ background: "var(--grey-50)", borderRadius: 12, padding: "12px 14px", fontSize: 13.5 }}>
+                        <div className="flex items-center gap8" style={{ marginBottom: 6 }}>
+                          {sess && <TypeBadge type={sess.type} />}
+                          <span style={{ fontWeight: 700 }}>
+                            {sess ? `Uke ${sess.week} · ${sess.title}` : `Økt #${c.sessionId}`}
+                          </span>
+                        </div>
+                        <div style={{ fontWeight: 700, color: "var(--t-langtur)" }}>
+                          <i className="fa-solid fa-pen-to-square" style={{ marginRight: 7, fontSize: 12 }} />
+                          {c.change}
+                        </div>
+                        <div className="muted" style={{ fontSize: 12.5, marginTop: 5 }}>{c.reason}</div>
+                        <details style={{ marginTop: 6 }}>
+                          <summary className="muted" style={{ fontSize: 12, cursor: "pointer" }}>Detaljer</summary>
+                          <div className="muted" style={{ fontSize: 12, textDecoration: "line-through", marginTop: 4 }}>{c.before}</div>
+                          <div style={{ fontSize: 12.5 }}>→ {c.after}</div>
+                        </details>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
             )}
             <div className="flex gap8" style={{ marginTop: 16 }}>
               {proposal.changes.length > 0 && <Button onClick={apply}>Godta endringer</Button>}

@@ -22,6 +22,35 @@ async function recentHistory(userId: number, excludeWorkoutId?: number): Promise
     .join("\n---\n");
 }
 
+/** Planlagt-vs-faktisk for HELE treningsperioden – grunnlag for AI-tilpasning. */
+async function periodComparison(userId: number): Promise<string> {
+  const sessions = await prisma.plannedSession.findMany({
+    where: { userId, status: { in: ["completed", "skipped"] } },
+    orderBy: { date: "asc" },
+    include: { workout: true },
+  });
+  if (sessions.length === 0) return "(ingen gjennomførte økter ennå)";
+
+  const fmtPace = (s?: number | null) =>
+    s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : "?";
+
+  return sessions
+    .map((s) => {
+      const plan =
+        `planlagt: ${s.targetZone ?? "sone ?"}` +
+        `${s.targetPaceMinSec ? `, ${fmtPace(s.targetPaceMinSec)}–${fmtPace(s.targetPaceMaxSec)}/km` : ""}` +
+        `${s.plannedDistanceKm ? `, ${s.plannedDistanceKm} km` : ""}`;
+      const head = `Uke ${s.week} [${s.type}] ${s.title}`;
+      if (s.status === "skipped") return `${head}: HOPPET OVER (${plan})`;
+      const w = s.workout;
+      const act = w
+        ? `faktisk: ${w.distanceKm?.toFixed(2) ?? "?"} km @ ${fmtPace(w.avgPaceSecPerKm)}/km, snittpuls ${w.avgHr ?? "?"}${w.maxHr ? `/maks ${w.maxHr}` : ""}`
+        : "faktisk: (fullført, men ingen øktdata)";
+      return `${head}: ${plan} → ${act}`;
+    })
+    .join("\n");
+}
+
 // Generer (eller regenerer) AI-vurdering av en økt
 aiRouter.post("/workouts/:id/evaluate", async (req, res) => {
   const user = await currentUser(req);
@@ -122,7 +151,7 @@ aiRouter.post("/plan/propose", async (req, res) => {
       orderBy: { date: "asc" },
       take: 9,
     });
-    const history = await recentHistory(user.id);
+    const history = await periodComparison(user.id);
     const proposal = await proposePlanAdjustment(user, upcoming, history);
     res.json(proposal);
   } catch (e) {
@@ -145,7 +174,7 @@ aiRouter.post("/plan/apply", async (req, res) => {
   }
 
   const change = await prisma.planChange.create({
-    data: { userId: user.id, summary: proposal.summary, diffJson: JSON.stringify(proposal.changes), accepted: true },
+    data: { userId: user.id, summary: proposal.evaluation, diffJson: JSON.stringify(proposal.changes), accepted: true },
   });
   res.json({ ok: true, change });
 });
