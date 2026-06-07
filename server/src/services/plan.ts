@@ -93,6 +93,26 @@ export async function seedProgram(userId: number, force = false): Promise<number
   return created;
 }
 
+/**
+ * Engangs/idempotent opprydding: en planlagt økt som er koblet til en registrert økt
+ * SKAL være "completed" og ligge på øktens faktiske dato. Eldre data kan stå som
+ * "moved"/"planned" fra før låsingen ble innført – dette forener dem. Trygt å kjøre hver oppstart.
+ */
+export async function reconcileLinkedSessions(): Promise<number> {
+  const stale = await prisma.plannedSession.findMany({
+    where: { workoutId: { not: null }, status: { not: "completed" } },
+    include: { workout: true },
+  });
+  for (const s of stale) {
+    const when = s.workout?.startTime;
+    const date = when
+      ? new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), 12))
+      : s.date;
+    await prisma.plannedSession.update({ where: { id: s.id }, data: { status: "completed", date } });
+  }
+  return stale.length;
+}
+
 /** Regenererer datoer ut fra (nye) treningsdager. Forankres på brukerens egen plan-start. */
 export async function regenerateDates(userId: number, days: string[]): Promise<void> {
   const sessions = await prisma.plannedSession.findMany({ where: { userId } });
@@ -110,6 +130,7 @@ export async function regenerateDates(userId: number, days: string[]): Promise<v
   for (const s of sessions) {
     if (s.type === "race") continue; // løpsdagen er låst
     if (s.status === "moved") continue; // ikke overstyr manuelt flyttede økter
+    if (s.status === "completed") continue; // fullførte økter beholder sin faktiske dato
     const date = sessionDate(startMonday, dayOffsets, s.week, s.slot);
     await prisma.plannedSession.update({ where: { id: s.id }, data: { date } });
   }

@@ -6,7 +6,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
 import { requireAuth, requireAdmin, login, logout, authStatus, me } from "./auth.js";
-import { seedProgram } from "./services/plan.js";
+import { seedProgram, reconcileLinkedSessions } from "./services/plan.js";
 import { ensureAdminAndBackfill } from "./services/users.js";
 import { planRouter } from "./routes/plan.js";
 import { settingsRouter } from "./routes/settings.js";
@@ -65,6 +65,10 @@ async function start() {
   const admin = await ensureAdminAndBackfill();
   const created = await seedProgram(admin.id);
   if (created > 0) console.log(`✅ Seedet ${created} planlagte økter for admin ved oppstart.`);
+
+  // Rydd opp eldre koblede økter som feilaktig står som "moved"/"planned"
+  const reconciled = await reconcileLinkedSessions();
+  if (reconciled > 0) console.log(`✅ Forenet ${reconciled} koblede økter til "fullført" ved oppstart.`);
 
   app.listen(port, () => {
     console.log(`\n🏃 Treningsapp-server kjører på http://localhost:${port}`);

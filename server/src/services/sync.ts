@@ -41,7 +41,7 @@ export async function syncGarmin(userId: number, limit = 20): Promise<SyncResult
       const parsed = await downloadAndParse(user, act);
       const workout = await storeWorkout(userId, garminActivityId, act, parsed, typeKey);
       result.imported++;
-      const matched = await matchToPlanned(userId, workout.id, parsed.startTime);
+      const matched = await matchToPlanned(userId, workout.id, parsed.startTime, parsed.distanceKm ?? null);
       if (matched) result.matched++;
     } catch (e) {
       result.errors.push(`${garminActivityId}: ${(e as Error).message}`);
@@ -88,8 +88,18 @@ function downsample<T>(arr: T[], target = 600): T[] {
   return arr.filter((_, i) => i % step === 0);
 }
 
-/** Koble en økt til nærmeste ukoblede planlagte økt (samme bruker) innen ±2 dager. */
-export async function matchToPlanned(userId: number, workoutId: number, when: Date): Promise<boolean> {
+/**
+ * Koble en økt til en ukoblet planlagt økt (samme bruker) innen ±2 dager.
+ * Prioritering: (1) samme dag som økten, deretter nærmeste dag; (2) ved flere
+ * kandidater like nær i tid – den hvis planlagte distanse passer best med faktisk distanse.
+ * Brukeren kan uansett overstyre manuelt etterpå.
+ */
+export async function matchToPlanned(
+  userId: number,
+  workoutId: number,
+  when: Date,
+  distanceKm: number | null = null
+): Promise<boolean> {
   const dayMs = 24 * 60 * 60 * 1000;
   const from = new Date(when.getTime() - 2 * dayMs);
   const to = new Date(when.getTime() + 2 * dayMs);
@@ -99,13 +109,27 @@ export async function matchToPlanned(userId: number, workoutId: number, when: Da
   });
   if (candidates.length === 0) return false;
 
-  candidates.sort(
-    (a, b) => Math.abs(a.date.getTime() - when.getTime()) - Math.abs(b.date.getTime() - when.getTime())
-  );
+  // Antall hele kalenderdager mellom planlagt dag og øktens dag (0 = samme dag).
+  const dayKey = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const workoutDay = dayKey(when);
+  const dayDiff = (d: Date) => Math.abs((dayKey(d) - workoutDay) / dayMs);
+  // Avvik mellom planlagt og faktisk distanse (ukjent planlagt distanse rangeres sist).
+  const distDiff = (planned: number | null) =>
+    planned != null && distanceKm != null ? Math.abs(planned - distanceKm) : Number.POSITIVE_INFINITY;
+
+  candidates.sort((a, b) => {
+    const dd = dayDiff(a.date) - dayDiff(b.date); // 1) samme/nærmeste dag
+    if (dd !== 0) return dd;
+    return distDiff(a.plannedDistanceKm) - distDiff(b.plannedDistanceKm); // 2) best distansematch
+  });
+
+  // Fullført-datoen settes til datoen økten FAKTISK ble gjennomført (ikke planlagt dag).
+  // Normaliser til kl 12 UTC for å være konsistent med resten av appens datoer.
+  const doneDate = new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), 12));
 
   await prisma.plannedSession.update({
     where: { id: candidates[0].id },
-    data: { workoutId, status: "completed" },
+    data: { workoutId, status: "completed", date: doneDate },
   });
   return true;
 }

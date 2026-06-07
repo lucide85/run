@@ -147,6 +147,52 @@ ${summarizeWorkout(workout)}`;
   return textOf(resp);
 }
 
+/** Beskriv en planlagt økt kompakt for AI-kontekst (mål, sone, tempo, distanse). */
+function describePlanned(s: PlannedSession): string {
+  const fmtPace = (x?: number | null) =>
+    x ? `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")} min/km` : null;
+  const lines = [
+    `Planlagt økt (uke ${s.week}, ${s.phaseName}, type "${s.type}"): ${s.title}`,
+    s.description,
+    `Dato: ${s.date.toISOString().slice(0, 10)}`,
+  ];
+  if (s.targetZone) lines.push(`Målsone: ${s.targetZone}`);
+  const pr =
+    fmtPace(s.targetPaceMinSec) && fmtPace(s.targetPaceMaxSec)
+      ? `${fmtPace(s.targetPaceMinSec)}–${fmtPace(s.targetPaceMaxSec)}`
+      : null;
+  if (pr) lines.push(`Måltempo: ${pr}`);
+  if (s.plannedDistanceKm) lines.push(`Planlagt distanse: ${s.plannedDistanceKm} km`);
+  return lines.join("\n");
+}
+
+/** Spørsmål-og-svar om en PLANLAGT (kommende) økt – f.eks. «bør jeg finne en flat løype?». */
+export async function chatAboutPlannedSession(
+  user: User,
+  session: PlannedSession,
+  thread: { role: "user" | "assistant"; content: string }[]
+): Promise<string> {
+  const intro = `Kontekst for samtalen — en PLANLAGT, kommende økt (ikke gjennomført ennå):
+
+${describePlanned(session)}
+
+Brukeren kan stille spørsmål om hvordan økten bør gjennomføres (terreng, løype, tempo, oppvarming, vær, utstyr osv.). Svar konkret, praktisk og kort på norsk, tilpasset hensikten med økten og pulssonene over.`;
+
+  const messages = [
+    { role: "user" as const, content: intro },
+    { role: "assistant" as const, content: "Forstått – jeg kjenner den planlagte økten. Spør i vei." },
+    ...thread,
+  ];
+
+  const resp = await getClient().messages.create({
+    model: model(),
+    max_tokens: 800,
+    system: systemBlocks(user),
+    messages,
+  });
+  return textOf(resp);
+}
+
 /**
  * Nybegynnervennlig beskrivelse av en planlagt økt: HVORFOR akkurat denne økten
  * er bra for løperen nå – treningseffekter, hvordan den skal kjennes, og til slutt

@@ -27,8 +27,10 @@ export default function CalendarPage() {
     if (!newDate) return;
     try {
       await api.updateSession(id, { date: newDate.toISOString() });
-    } catch {
+      await load();
+    } catch (e) {
       info.revert();
+      alert((e as Error).message);
     }
   }
 
@@ -40,13 +42,16 @@ export default function CalendarPage() {
 
   const events = sessions.map((s) => {
     const done = s.status === "completed";
+    // Fullførte økter koblet til en registrert økt er låst – kan ikke dras.
+    const locked = done && s.workoutId != null;
     return {
       id: String(s.id),
-      title: s.title,
+      title: locked ? `✓ ${s.title}` : s.title,
       start: s.date.slice(0, 10),
       allDay: true,
       backgroundColor: done ? "#0E8540" : SESSION_COLORS[s.type],
       borderColor: done ? "#0E8540" : SESSION_COLORS[s.type],
+      startEditable: !locked,
       extendedProps: { type: s.type, status: s.status, workoutId: s.workoutId ?? null },
     };
   });

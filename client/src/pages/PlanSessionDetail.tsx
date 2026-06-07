@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, PlannedSession, Settings } from "../api/client";
-import { PageTitle, Spinner, TypeBadge, StatusBadge } from "../components/ui";
+import { api, AiMessage, PlannedSession, Settings, Workout } from "../api/client";
+import { PageTitle, Spinner, TypeBadge, StatusBadge, Button } from "../components/ui";
 import { dateNo, pace, dist, duration } from "../lib/format";
 import { computeZones, ZONE_COLORS, Zone } from "../lib/zones";
 import { Markdown } from "../components/Markdown";
@@ -49,11 +49,24 @@ export default function PlanSessionDetail() {
   const [tips, setTips] = useState<string | null>(null);
   const [tipsLoading, setTipsLoading] = useState(false);
   const [tipsError, setTipsError] = useState("");
+  const [messages, setMessages] = useState<AiMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatting, setChatting] = useState(false);
+  const chatEnd = useRef<HTMLDivElement>(null);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [linking, setLinking] = useState(false);
 
   async function load() {
-    const [session, st] = await Promise.all([api.session(sid), api.settings()]);
+    const [session, st, msgs, wos] = await Promise.all([
+      api.session(sid),
+      api.settings(),
+      api.sessionMessages(sid).catch(() => [] as AiMessage[]),
+      api.workouts().catch(() => [] as Workout[]),
+    ]);
     setS(session);
     setSettings(st);
+    setMessages(msgs);
+    setWorkouts(wos);
     // Hent (eller generer) øktbeskrivelse – caches på serveren per økt + klokkemodell
     setTipsLoading(true);
     try {
@@ -70,8 +83,33 @@ export default function PlanSessionDetail() {
     setS(null);
     setTips(null);
     setTipsError("");
+    setMessages([]);
+    setChatInput("");
     load();
   }, [sid]);
+
+  useEffect(() => {
+    chatEnd.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function sendChat(text?: string) {
+    const q = (text ?? chatInput).trim();
+    if (!q || chatting) return;
+    setChatInput("");
+    setChatting(true);
+    setMessages((m) => [
+      ...m,
+      { id: -Date.now(), role: "user", content: q, kind: "plan_chat", createdAt: new Date().toISOString() },
+    ]);
+    try {
+      const reply = await api.sessionChat(sid, q);
+      setMessages((m) => [...m, reply]);
+    } catch (e) {
+      alert(`Chat feilet: ${(e as Error).message}`);
+    } finally {
+      setChatting(false);
+    }
+  }
 
   async function regenerateTips() {
     setTipsLoading(true);
@@ -83,6 +121,18 @@ export default function PlanSessionDetail() {
       setTipsError((e as Error).message);
     } finally {
       setTipsLoading(false);
+    }
+  }
+
+  async function linkWorkout(workoutId: number | null) {
+    setLinking(true);
+    try {
+      await api.linkSessionWorkout(sid, workoutId);
+      await load();
+    } catch (e) {
+      alert(`Kunne ikke endre kobling: ${(e as Error).message}`);
+    } finally {
+      setLinking(false);
     }
   }
 
@@ -238,6 +288,137 @@ export default function PlanSessionDetail() {
             <p style={{ color: "var(--error-500)", margin: 0 }}>Kunne ikke hente beskrivelsen: {tipsError}</p>
           )}
           {tips && !tipsLoading && <Markdown>{tips}</Markdown>}
+        </div>
+      </div>
+
+      {/* Spør AI-treneren om denne planlagte økten */}
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>
+            <i className="fa-solid fa-comments" style={{ color: "var(--primary-500)", marginRight: 9 }} />
+            Spør treneren om økten
+          </h3>
+        </div>
+        <div className="card-body">
+          {messages.length === 0 && !chatting && (
+            <p className="muted" style={{ marginTop: 0, fontSize: 13.5 }}>
+              Lurer du på noe om denne økten? Spør om løype, tempo, oppvarming, vær eller utstyr.
+            </p>
+          )}
+
+          {messages.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 14 }}>
+              {messages.map((m) =>
+                m.role === "user" ? (
+                  <div
+                    key={m.id}
+                    style={{
+                      marginLeft: "auto",
+                      maxWidth: "85%",
+                      background: "var(--primary-500)",
+                      color: "#fff",
+                      borderRadius: 16,
+                      padding: "10px 16px",
+                      fontSize: 14,
+                    }}
+                  >
+                    {m.content}
+                  </div>
+                ) : (
+                  <div
+                    key={m.id}
+                    style={{ maxWidth: "85%", background: "var(--grey-100)", borderRadius: 16, padding: "10px 16px" }}
+                  >
+                    <Markdown>{m.content}</Markdown>
+                  </div>
+                )
+              )}
+              {chatting && (
+                <div className="muted" style={{ fontSize: 13.5 }}>
+                  <i className="fa-solid fa-arrows-rotate fa-spin" style={{ marginRight: 8 }} />
+                  Treneren tenker…
+                </div>
+              )}
+              <div ref={chatEnd} />
+            </div>
+          )}
+
+          {messages.length === 0 && (
+            <div className="flex gap8 wrap" style={{ marginBottom: 14 }}>
+              {[
+                "Bør jeg finne en flat løype til denne økten?",
+                "Hvordan bør jeg varme opp?",
+                "Hva gjør jeg hvis det er kaldt eller regn?",
+              ].map((q) => (
+                <button
+                  key={q}
+                  className="chip"
+                  style={{ cursor: "pointer", border: "1px solid var(--border-subtle)" }}
+                  disabled={chatting}
+                  onClick={() => sendChat(q)}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap8">
+            <input
+              className="input"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendChat()}
+              placeholder="Skriv et spørsmål om økten…"
+            />
+            <Button onClick={() => sendChat()} disabled={chatting || !chatInput.trim()}>
+              <i className="fa-solid fa-paper-plane" />
+              Send
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tilkoblet treningsøkt – manuell matching */}
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>
+            <i className="fa-solid fa-link" style={{ color: "var(--primary-500)", marginRight: 9 }} />
+            Tilkoblet treningsøkt
+          </h3>
+        </div>
+        <div className="card-body">
+          {w ? (
+            <p style={{ marginTop: 0 }}>
+              Koblet til <b>{dateNo(w.startTime)}</b> · {dist(w.distanceKm)}
+              {w.name ? ` · ${w.name}` : ""}.
+            </p>
+          ) : (
+            <p className="muted" style={{ marginTop: 0 }}>
+              Ingen treningsøkt er koblet til denne planlagte økten ennå.
+            </p>
+          )}
+          <div className="field" style={{ marginTop: 10, maxWidth: 440 }}>
+            <label>Velg treningsøkt</label>
+            <select
+              className="input"
+              value={w?.id ?? ""}
+              disabled={linking}
+              onChange={(e) => linkWorkout(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">— Ingen / fjern kobling —</option>
+              {workouts.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {dateNo(x.startTime)} · {dist(x.distanceKm)}
+                  {x.name ? ` · ${x.name}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+            Overstyrer den automatiske matchingen. Velger du en økt som allerede er koblet til en annen dag, flyttes
+            koblingen hit. Fullført-datoen settes til datoen økten faktisk ble gjennomført.
+          </p>
         </div>
       </div>
 

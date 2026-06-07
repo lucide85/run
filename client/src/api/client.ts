@@ -51,7 +51,7 @@ export interface AiMessage {
   workoutId?: number | null;
   role: "user" | "assistant" | "system";
   content: string;
-  kind: "feedback" | "chat" | "plan_adjustment";
+  kind: "feedback" | "chat" | "plan_adjustment" | "plan_chat";
   createdAt: string;
 }
 
@@ -213,6 +213,16 @@ export const api = {
       `/api/ai/sessions/${sessionId}/watch-tips${force ? "?force=true" : ""}`,
       { method: "POST" }
     ),
+  // Manuell kobling av planlagt økt ↔ treningsøkt (null = fjern kobling)
+  linkSessionWorkout: (sessionId: number, workoutId: number | null) =>
+    req<PlannedSession>(`/api/plan/sessions/${sessionId}/link`, {
+      method: "PATCH",
+      body: JSON.stringify({ workoutId }),
+    }),
+  // AI-chat om en planlagt økt
+  sessionMessages: (sessionId: number) => req<AiMessage[]>(`/api/ai/sessions/${sessionId}/messages`),
+  sessionChat: (sessionId: number, message: string) =>
+    req<AiMessage>(`/api/ai/sessions/${sessionId}/chat`, { method: "POST", body: JSON.stringify({ message }) }),
   proposePlan: () => req<PlanProposal>("/api/ai/plan/propose", { method: "POST" }),
   applyPlan: (proposal: PlanProposal) =>
     req<{ ok: true }>("/api/ai/plan/apply", { method: "POST", body: JSON.stringify(proposal) }),

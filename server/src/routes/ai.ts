@@ -4,6 +4,7 @@ import { currentUser } from "../auth.js";
 import {
   evaluateWorkout,
   chatAboutWorkout,
+  chatAboutPlannedSession,
   proposePlanAdjustment,
   summarizeWorkout,
   generateWatchTips,
@@ -137,6 +138,50 @@ aiRouter.post("/sessions/:id/watch-tips", async (req, res) => {
       data: { watchTips: tips, watchTipsFor: cacheKey },
     });
     res.json({ tips, cached: false });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Hent AI-chat-meldinger for en PLANLAGT økt
+aiRouter.get("/sessions/:id/messages", async (req, res) => {
+  const user = await currentUser(req);
+  const id = Number(req.params.id);
+  const session = await prisma.plannedSession.findFirst({ where: { id, userId: user.id } });
+  if (!session) return res.status(404).json({ error: "Ikke funnet" });
+  const messages = await prisma.aiMessage.findMany({
+    where: { plannedSessionId: id, kind: "plan_chat" },
+    orderBy: { createdAt: "asc" },
+  });
+  res.json(messages);
+});
+
+// Still et spørsmål til AI om en PLANLAGT økt
+aiRouter.post("/sessions/:id/chat", async (req, res) => {
+  const user = await currentUser(req);
+  const id = Number(req.params.id);
+  const { message } = req.body ?? {};
+  if (!message) return res.status(400).json({ error: "message kreves" });
+
+  const session = await prisma.plannedSession.findFirst({ where: { id, userId: user.id } });
+  if (!session) return res.status(404).json({ error: "Ikke funnet" });
+
+  try {
+    await prisma.aiMessage.create({
+      data: { plannedSessionId: id, role: "user", content: message, kind: "plan_chat" },
+    });
+
+    const prior = await prisma.aiMessage.findMany({
+      where: { plannedSessionId: id, kind: "plan_chat" },
+      orderBy: { createdAt: "asc" },
+    });
+    const thread = prior.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+    const reply = await chatAboutPlannedSession(user, session, thread);
+    const msg = await prisma.aiMessage.create({
+      data: { plannedSessionId: id, role: "assistant", content: reply, kind: "plan_chat" },
+    });
+    res.json(msg);
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
