@@ -128,6 +128,37 @@ export interface PlanProposal {
   }[];
 }
 
+export interface RegenPlanSession {
+  slot: number;
+  type: "easy" | "quality" | "long" | "race";
+  title: string;
+  description: string;
+  distanceKm?: number;
+  targetZone?: string;
+  paceMinSec?: number;
+  paceMaxSec?: number;
+}
+export interface RegenPlanWeek {
+  week: number;
+  phase: number;
+  phaseName: string;
+  sessions: RegenPlanSession[];
+}
+export interface RegenProposal {
+  summary: string;
+  weeks: RegenPlanWeek[];
+  raceName: string;
+  raceDate: string;
+  raceDistanceKm: number;
+  weeksUntil: number;
+}
+export interface RegenerateInput {
+  instructions?: string;
+  raceName: string;
+  raceDate: string;
+  raceDistanceKm: number;
+}
+
 async function req<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
@@ -226,4 +257,11 @@ export const api = {
   proposePlan: () => req<PlanProposal>("/api/ai/plan/propose", { method: "POST" }),
   applyPlan: (proposal: PlanProposal) =>
     req<{ ok: true }>("/api/ai/plan/apply", { method: "POST", body: JSON.stringify(proposal) }),
+  regeneratePropose: (input: RegenerateInput) =>
+    req<RegenProposal>("/api/ai/plan/regenerate", { method: "POST", body: JSON.stringify(input) }),
+  regenerateApply: (proposal: RegenProposal) =>
+    req<{ ok: true; created: number; removed: number }>("/api/ai/plan/regenerate/apply", {
+      method: "POST",
+      body: JSON.stringify(proposal),
+    }),
 };

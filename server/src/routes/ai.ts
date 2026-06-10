@@ -10,6 +10,11 @@ import {
   generateWatchTips,
   type PlanAdjustmentProposal,
 } from "../services/ai.js";
+import {
+  regeneratePlanProposal,
+  applyRegeneratedPlan,
+  type RegenerateOptions,
+} from "../services/aiPlan.js";
 
 export const aiRouter = Router();
 
@@ -199,6 +204,47 @@ aiRouter.post("/plan/propose", async (req, res) => {
     const history = await periodComparison(user.id);
     const proposal = await proposePlanAdjustment(user, upcoming, history);
     res.json(proposal);
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Lag et FORSLAG til regenerert program (fra i dag til løp). Lagrer ingenting.
+aiRouter.post("/plan/regenerate", async (req, res) => {
+  const user = await currentUser(req);
+  const { instructions, raceName, raceDate, raceDistanceKm } = req.body ?? {};
+  if (!raceName || !raceDate || !(Number(raceDistanceKm) > 0)) {
+    return res.status(400).json({ error: "raceName, raceDate og raceDistanceKm kreves" });
+  }
+  try {
+    const opts: RegenerateOptions = {
+      instructions: typeof instructions === "string" ? instructions : undefined,
+      raceName: String(raceName),
+      raceDate: String(raceDate),
+      raceDistanceKm: Number(raceDistanceKm),
+    };
+    const proposal = await regeneratePlanProposal(user, opts);
+    res.json(proposal);
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Godta og bytt ut programmet fra i dag til løp (beholder fullførte økter)
+aiRouter.post("/plan/regenerate/apply", async (req, res) => {
+  const user = await currentUser(req);
+  const { weeks, raceName, raceDate, raceDistanceKm } = req.body ?? {};
+  if (!Array.isArray(weeks) || !raceName || !raceDate || !(Number(raceDistanceKm) > 0)) {
+    return res.status(400).json({ error: "weeks, raceName, raceDate og raceDistanceKm kreves" });
+  }
+  try {
+    const opts: RegenerateOptions = {
+      raceName: String(raceName),
+      raceDate: String(raceDate),
+      raceDistanceKm: Number(raceDistanceKm),
+    };
+    const result = await applyRegeneratedPlan(user, weeks, opts);
+    res.json({ ok: true, ...result });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }

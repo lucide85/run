@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, PlannedSession, PlanProposal } from "../api/client";
+import { api, PlannedSession, PlanProposal, RegenProposal, Settings } from "../api/client";
 import { PageTitle, Button, Spinner, TypeBadge, StatusBadge } from "../components/ui";
 import { Markdown } from "../components/Markdown";
-import { dateShort, dist, pace, SESSION_COLORS } from "../lib/format";
+import { dateShort, dist, pace, SESSION_COLORS, SESSION_LABELS } from "../lib/format";
 
 const PHASE_NAMES: Record<number, string> = {
   1: "Fase 1 — Grunnlag",
@@ -18,9 +18,23 @@ export default function Program() {
   const [loading, setLoading] = useState(true);
   const [proposal, setProposal] = useState<PlanProposal | null>(null);
   const [proposing, setProposing] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  // Regenerering av program
+  const [regenOpen, setRegenOpen] = useState(false);
+  const [rName, setRName] = useState("");
+  const [rDate, setRDate] = useState("");
+  const [rDist, setRDist] = useState(10);
+  const [rInstr, setRInstr] = useState("");
+  const [regen, setRegen] = useState<RegenProposal | null>(null);
+  const [regenLoading, setRegenLoading] = useState(false);
+  const [regenDetails, setRegenDetails] = useState(false);
+  const [applyingRegen, setApplyingRegen] = useState(false);
 
   async function load() {
-    setSessions(await api.sessions());
+    const [s, st] = await Promise.all([api.sessions(), api.settings().catch(() => null)]);
+    setSessions(s);
+    if (st) setSettings(st);
     setLoading(false);
   }
   useEffect(() => {
@@ -44,6 +58,53 @@ export default function Program() {
     await api.applyPlan(proposal);
     setProposal(null);
     await load();
+  }
+
+  function openRegen() {
+    // Prefyll fra dagens mål/plan
+    setRName(settings?.race.name ?? "");
+    setRDate((settings?.race.date ?? "").slice(0, 10));
+    const raceSession = sessions.find((s) => s.type === "race");
+    setRDist(raceSession?.plannedDistanceKm ?? 10);
+    setRInstr("");
+    setRegen(null);
+    setRegenDetails(false);
+    setProposal(null);
+    setRegenOpen(true);
+  }
+
+  async function regeneratePropose() {
+    if (!rName || !rDate || !(rDist > 0)) {
+      alert("Fyll inn navn, dato og distanse for målet.");
+      return;
+    }
+    setRegenLoading(true);
+    setRegen(null);
+    try {
+      setRegen(
+        await api.regeneratePropose({ raceName: rName, raceDate: rDate, raceDistanceKm: rDist, instructions: rInstr })
+      );
+    } catch (e) {
+      alert(`Kunne ikke lage forslag: ${(e as Error).message}`);
+    } finally {
+      setRegenLoading(false);
+    }
+  }
+
+  async function regenerateApply() {
+    if (!regen) return;
+    if (!confirm("Bytte ut resten av programmet fra i dag til løpsdato? Fullførte økter beholdes.")) return;
+    setApplyingRegen(true);
+    try {
+      await api.regenerateApply(regen);
+      setRegenOpen(false);
+      setRegen(null);
+      await load();
+    } catch (e) {
+      alert(`Kunne ikke bytte ut programmet: ${(e as Error).message}`);
+    } finally {
+      setApplyingRegen(false);
+    }
   }
 
   if (loading) return <Spinner />;
@@ -79,12 +140,128 @@ export default function Program() {
         title="Treningsprogram"
         subtitle={subtitle}
         action={
-          <Button variant="ai" onClick={propose} disabled={proposing}>
-            <i className={`fa-solid ${proposing ? "fa-arrows-rotate fa-spin" : "fa-wand-magic-sparkles"}`} />
-            {proposing ? "Vurderer…" : "AI-tilpass plan"}
-          </Button>
+          <div className="flex gap8 wrap">
+            <Button variant="ai" onClick={propose} disabled={proposing}>
+              <i className={`fa-solid ${proposing ? "fa-arrows-rotate fa-spin" : "fa-wand-magic-sparkles"}`} />
+              {proposing ? "Vurderer…" : "AI-tilpass plan"}
+            </Button>
+            <Button variant="secondary" onClick={openRegen}>
+              <i className="fa-solid fa-rotate" />
+              Regenerer program
+            </Button>
+          </div>
         }
       />
+
+      {regenOpen && (
+        <div className="card mb24" style={{ borderColor: "var(--t-langtur)" }}>
+          <div className="card-head">
+            <h3 style={{ margin: 0, fontWeight: 700 }}>
+              <i className="fa-solid fa-rotate" style={{ color: "var(--t-langtur)", marginRight: 8 }} />
+              Regenerer programmet
+            </h3>
+            <span className="link muted" style={{ fontSize: 13 }} onClick={() => setRegenOpen(false)}>
+              Lukk
+            </span>
+          </div>
+          <div className="card-body">
+            <p className="muted" style={{ marginTop: 0, fontSize: 13.5 }}>
+              Juster målet og beskriv hva du ønsker endret. AI lager et forslag for resten av perioden – fullførte økter beholdes.
+            </p>
+
+            <div className="grid g3" style={{ gap: 12 }}>
+              <div className="field">
+                <label>Navn på målet</label>
+                <input className="input" value={rName} onChange={(e) => setRName(e.target.value)} placeholder="F.eks. Sentrumsløpet" />
+              </div>
+              <div className="field">
+                <label>Dato</label>
+                <input className="input" type="date" value={rDate} onChange={(e) => setRDate(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Distanse (km)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  step={0.5}
+                  value={rDist}
+                  onChange={(e) => setRDist(Number(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>Ønskede endringer</label>
+              <textarea
+                className="input"
+                rows={3}
+                value={rInstr}
+                onChange={(e) => setRInstr(e.target.value)}
+                placeholder="F.eks. «Jeg vil ha flere intervalløkter», «mindre volum, jeg sliter med leggen», «legg inn en testkonkurranse om tre uker»…"
+              />
+            </div>
+
+            <div className="flex gap8" style={{ marginTop: 14 }}>
+              <Button variant="ai" onClick={regeneratePropose} disabled={regenLoading}>
+                <i className={`fa-solid ${regenLoading ? "fa-arrows-rotate fa-spin" : "fa-wand-magic-sparkles"}`} />
+                {regenLoading ? "Lager forslag…" : "Lag forslag"}
+              </Button>
+            </div>
+
+            {regen && (
+              <div style={{ marginTop: 20, borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
+                <div className="sec-label" style={{ marginBottom: 8 }}>
+                  Forslag · {regen.weeksUntil} {regen.weeksUntil === 1 ? "uke" : "uker"} fram til{" "}
+                  {regen.raceName} ({regen.raceDistanceKm % 1 === 0 ? regen.raceDistanceKm : regen.raceDistanceKm.toFixed(1)} km)
+                </div>
+                <Markdown>{regen.summary}</Markdown>
+
+                <span
+                  className="link"
+                  style={{ fontSize: 13, display: "inline-block", marginTop: 8 }}
+                  onClick={() => setRegenDetails((v) => !v)}
+                >
+                  <i className={`fa-solid ${regenDetails ? "fa-chevron-up" : "fa-chevron-down"}`} style={{ marginRight: 6 }} />
+                  {regenDetails ? "Skjul detaljer" : "Vis detaljer (uke for uke)"}
+                </span>
+
+                {regenDetails && (
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+                    {regen.weeks.map((w) => (
+                      <div key={w.week} style={{ background: "var(--grey-50)", borderRadius: 12, padding: "12px 14px" }}>
+                        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 8 }}>
+                          Uke {w.week} · {w.phaseName}
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {w.sessions.map((ss, i) => (
+                            <div key={i} style={{ fontSize: 13 }}>
+                              <span style={{ fontWeight: 700 }}>{SESSION_LABELS[ss.type] ?? ss.type}:</span> {ss.title}
+                              {ss.distanceKm ? ` · ${ss.distanceKm} km` : ""}
+                              {ss.targetZone ? ` · ${ss.targetZone}` : ""}
+                              <div className="muted" style={{ fontSize: 12 }}>{ss.description}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap8" style={{ marginTop: 16 }}>
+                  <Button onClick={regenerateApply} disabled={applyingRegen}>
+                    <i className={`fa-solid ${applyingRegen ? "fa-arrows-rotate fa-spin" : "fa-check"}`} />
+                    {applyingRegen ? "Bytter ut…" : "Godta og bytt ut programmet"}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setRegen(null)}>
+                    Forkast forslag
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {proposal && (
         <div className="card mb24" style={{ borderColor: "var(--primary-300)" }}>

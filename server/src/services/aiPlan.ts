@@ -243,3 +243,180 @@ async function persistPlan(
 
   return created;
 }
+
+// ============================ REGENERERING AV PROGRAM ============================
+// Egen flyt: bygg om RESTEN av planen (fra i dag til løp) ut fra form + ønskede endringer.
+// To steg: foreslå (ikke lagret) → godta (bytter ut fremtidige ikke-fullførte økter,
+// beholder fullførte i historikken).
+
+export interface RegenerateOptions {
+  instructions?: string;
+  raceName: string;
+  raceDate: string; // ISO yyyy-mm-dd
+  raceDistanceKm: number;
+}
+
+export interface RegenerateProposal {
+  summary: string;
+  weeks: PlanWeek[];
+  raceName: string;
+  raceDate: string;
+  raceDistanceKm: number;
+  weeksUntil: number;
+}
+
+/** Kompakt planlagt-vs-faktisk for siste fullførte økter – form-kontekst til AI. */
+async function formSummary(userId: number): Promise<string> {
+  const done = await prisma.plannedSession.findMany({
+    where: { userId, status: "completed" },
+    orderBy: { date: "desc" },
+    take: 10,
+    include: { workout: true },
+  });
+  if (done.length === 0) return "(ingen fullførte økter ennå)";
+  const fmtPace = (x?: number | null) =>
+    x ? `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}` : "?";
+  return done
+    .reverse()
+    .map((s) => {
+      const plan = `plan ${s.targetZone ?? "sone ?"}${s.plannedDistanceKm ? `, ${s.plannedDistanceKm} km` : ""}`;
+      const w = s.workout;
+      const act = w
+        ? `faktisk ${w.distanceKm?.toFixed(2) ?? "?"} km @ ${fmtPace(w.avgPaceSecPerKm)}/km, snittpuls ${w.avgHr ?? "?"}`
+        : "(ingen øktdata)";
+      return `Uke ${s.week} [${s.type}] ${s.title}: ${plan} → ${act}`;
+    })
+    .join("\n");
+}
+
+/** Lag et FORSLAG til ny plan fra i dag til løp (lagrer ingenting). */
+export async function regeneratePlanProposal(user: User, opts: RegenerateOptions): Promise<RegenerateProposal> {
+  const today = utcNoon(new Date());
+  const race = utcNoon(new Date(opts.raceDate));
+  const weeksUntil = Math.max(1, Math.ceil((race.getTime() - today.getTime()) / (7 * 86400000)));
+  const days = user.trainingDaysJson ? (JSON.parse(user.trainingDaysJson) as string[]) : DAYS_BY_COUNT[3];
+  const daysPerWeek = days.length || 3;
+  const zoneLines = computeZones(user.maxHr, user.restHr)
+    .map((z) => `Sone ${z.zone} (${z.name}): ${z.min}-${z.max} bpm`)
+    .join("\n");
+  const history = await formSummary(user.id);
+
+  const prompt = `Bygg om RESTEN av løpeplanen min, fra og med i dag (${today.toISOString().slice(0, 10)}) og fram til løpet. Allerede fullførte økter beholdes som historikk – du planlegger kun tiden som gjenstår.
+
+Utøver: ${user.nickname}
+Oppdatert mål: ${opts.raceName} på ${opts.raceDistanceKm} km, dato ${opts.raceDate}
+Antall økter per uke: ${daysPerWeek}
+Makspuls ${user.maxHr}, hvilepuls ${user.restHr}.
+Antall uker igjen til løpet: ${weeksUntil}
+
+PULSSONER:
+${zoneLines}
+
+ØNSKEDE ENDRINGER FRA MEG:
+${opts.instructions?.trim() || "(ingen spesifikke ønsker – bruk skjønn ut fra formen min)"}
+
+FORM SÅ LANGT (planlagt vs. faktisk):
+${history}
+
+Lag nøyaktig ${weeksUntil} uker (week 1..${weeksUntil}) med ${daysPerWeek} økter per uke (slot 1..${daysPerWeek}). Bruk fornuftig periodisering fram mot løpet (bygging → spissing → nedtrapping) og legg løpet (type "race", distanse ${opts.raceDistanceKm} km) som siste økt i siste uke. Hold de fleste øktene rolige (sone 2), vær konservativ og skadeforebyggende, og ta tydelig hensyn til formen min og ønskene over.
+
+I "summary": gi en OVERORDNET oppsummering på norsk av hva som endres sammenlignet med dagens plan, og hvorfor (3-6 korte punkter/setninger).`;
+
+  const resp = await getClient().messages.create({
+    model: model(),
+    max_tokens: 8000,
+    tools: [PLAN_TOOL],
+    tool_choice: { type: "tool", name: "create_training_plan" },
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  for (const block of resp.content) {
+    if (block.type === "tool_use" && block.name === "create_training_plan") {
+      const input = block.input as { summary: string; weeks: PlanWeek[] };
+      return {
+        summary: input.summary,
+        weeks: input.weeks,
+        raceName: opts.raceName,
+        raceDate: opts.raceDate,
+        raceDistanceKm: opts.raceDistanceKm,
+        weeksUntil,
+      };
+    }
+  }
+  throw new Error("AI klarte ikke å lage et planforslag. Prøv igjen.");
+}
+
+/**
+ * Bruk et godkjent forslag: bytt ut fremtidige IKKE-fullførte økter (fra i dag),
+ * behold fullførte i historikken, og oppdater målet.
+ */
+export async function applyRegeneratedPlan(
+  user: User,
+  weeks: PlanWeek[],
+  opts: RegenerateOptions
+): Promise<{ created: number; removed: number }> {
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+  const startMonday = mondayOfWeek(now);
+  const raceDate = utcNoon(new Date(opts.raceDate));
+  const days = user.trainingDaysJson ? (JSON.parse(user.trainingDaysJson) as string[]) : DAYS_BY_COUNT[3];
+  const dayOffsets = days
+    .map((d) => WEEKDAY_OFFSET[d])
+    .filter((n) => n !== undefined)
+    .sort((a, b) => a - b);
+
+  // Behold fullførte; fjern fremtidige ikke-fullførte (fra og med i dag)
+  const del = await prisma.plannedSession.deleteMany({
+    where: { userId: user.id, status: { not: "completed" }, date: { gte: todayStart } },
+  });
+
+  // Nye uker nummereres slik at de fortsetter etter beholdt historikk (unngår kollisjon i visning)
+  const kept = await prisma.plannedSession.findMany({ where: { userId: user.id }, select: { week: true } });
+  const weekOffset = kept.length ? Math.max(...kept.map((k) => k.week)) : 0;
+
+  let created = 0;
+  for (const w of weeks) {
+    for (const s of w.sessions) {
+      const offset = dayOffsets[(s.slot - 1) % dayOffsets.length] ?? (s.slot - 1) * 2;
+      let date = addDays(startMonday, (w.week - 1) * 7 + offset);
+      if (s.type === "race") date = raceDate;
+      if (s.type !== "race" && date < todayStart) continue; // ikke lag økter i fortiden
+      await prisma.plannedSession.create({
+        data: {
+          userId: user.id,
+          week: w.week + weekOffset,
+          phase: w.phase,
+          phaseName: w.phaseName,
+          type: s.type,
+          slot: s.slot,
+          title: s.title,
+          description: s.description,
+          targetZone: s.targetZone ?? null,
+          targetPaceMinSec: s.paceMinSec ?? null,
+          targetPaceMaxSec: s.paceMaxSec ?? null,
+          plannedDistanceKm: s.distanceKm ?? null,
+          date,
+          status: "planned",
+        },
+      });
+      created++;
+    }
+  }
+
+  // Oppdater mål + lagre distanse i onboarding-svarene
+  let answers: Record<string, unknown> = {};
+  try {
+    answers = user.onboardingAnswersJson ? JSON.parse(user.onboardingAnswersJson) : {};
+  } catch {
+    answers = {};
+  }
+  answers.raceName = opts.raceName;
+  answers.raceDate = opts.raceDate;
+  answers.raceDistanceKm = opts.raceDistanceKm;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { raceName: opts.raceName, raceDate, onboardingAnswersJson: JSON.stringify(answers) },
+  });
+
+  return { created, removed: del.count };
+}
