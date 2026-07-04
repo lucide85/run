@@ -17,11 +17,34 @@ const fmtPace = (s?: number | null) =>
 const fmtDur = (s?: number | null) =>
   s || s === 0 ? `${Math.floor((s ?? 0) / 60)}:${String((s ?? 0) % 60).padStart(2, "0")}` : "?";
 
+/**
+ * Historikk-avgrensning: med «Vis kun historikk fra programstart» slått på
+ * returneres et tidspunkt like før programmets første økt – alt eldre skjules
+ * i lister, grafer, rekorder og AI-kontekst. Ingenting slettes. Null = av.
+ */
+export async function historyCutoff(user: User): Promise<Date | null> {
+  if (!user.limitHistoryToPlan) return null;
+  const first = await prisma.plannedSession.findFirst({
+    where: { userId: user.id },
+    orderBy: { date: "asc" },
+    select: { date: true },
+  });
+  if (!first) return null;
+  // Plandatoer er kl 12 UTC – trekk 12 timer så hele første øktdag er med.
+  return new Date(first.date.getTime() - 12 * 60 * 60 * 1000);
+}
+
+/** Prisma-filter for startTime basert på historikk-avgrensningen. */
+export async function workoutTimeFilter(user: User): Promise<{ gte: Date } | undefined> {
+  const cutoff = await historyCutoff(user);
+  return cutoff ? { gte: cutoff } : undefined;
+}
+
 /** Kort historikk fra brukerens siste økter (ekskl. en gitt økt). */
 export async function recentHistory(user: User, excludeWorkoutId?: number): Promise<string> {
   const zones = computeZones(user.maxHr, user.restHr);
   const recent = await prisma.workout.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, startTime: await workoutTimeFilter(user) },
     orderBy: { startTime: "desc" },
     take: 6,
   });

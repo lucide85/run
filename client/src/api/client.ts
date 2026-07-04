@@ -87,6 +87,7 @@ export interface Settings {
   googleEnabled: boolean;
   lastSync?: string | null;
   home: { lat: number | null; lon: number | null; place: string | null };
+  limitHistoryToPlan?: boolean;
 }
 
 export interface RecordEntry {
@@ -275,6 +276,7 @@ export const api = {
       homeLat?: number | null;
       homeLon?: number | null;
       homePlace?: string | null;
+      limitHistoryToPlan?: boolean;
     }
   ) =>
     req<{ ok: true; regenerated: boolean }>("/api/settings", { method: "PUT", body: JSON.stringify(data) }),

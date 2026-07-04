@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
-import { currentUserId } from "../auth.js";
+import { currentUser, currentUserId } from "../auth.js";
 import { ah } from "../lib/http.js";
 import { classifyLaps, parseLapsJson, workSummary } from "../services/intervals.js";
+import { workoutTimeFilter } from "../services/history.js";
 
 export const workoutsRouter = Router();
 
@@ -15,11 +16,11 @@ function safeJson<T>(json: string | null, fallback: T): T {
   }
 }
 
-// Alle økter (uten tunge strøm-data)
+// Alle økter (uten tunge strøm-data). Respekterer historikk-avgrensningen.
 workoutsRouter.get("/", ah(async (req, res) => {
-  const userId = currentUserId(req);
+  const user = await currentUser(req);
   const workouts = await prisma.workout.findMany({
-    where: { userId },
+    where: { userId: user.id, startTime: await workoutTimeFilter(user) },
     orderBy: { startTime: "desc" },
     select: {
       id: true, garminActivityId: true, startTime: true, sport: true, name: true,

@@ -24,6 +24,9 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
   const [homeLon, setHomeLon] = useState("");
   const [homeMsg, setHomeMsg] = useState("");
   const [homeBusy, setHomeBusy] = useState(false);
+  const [limitHistory, setLimitHistory] = useState(false);
+  const [historyMsg, setHistoryMsg] = useState("");
+  const [historyBusy, setHistoryBusy] = useState(false);
 
   async function load() {
     const s = await api.settings();
@@ -35,10 +38,32 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
     setHomePlace(s.home?.place ?? "");
     setHomeLat(s.home?.lat != null ? String(s.home.lat) : "");
     setHomeLon(s.home?.lon != null ? String(s.home.lon) : "");
+    setLimitHistory(!!s.limitHistoryToPlan);
   }
   useEffect(() => {
     load();
   }, []);
+
+  async function saveLimitHistory(checked: boolean) {
+    setHistoryBusy(true);
+    setHistoryMsg("");
+    setLimitHistory(checked); // optimistisk – tilbakestilles ved feil
+    try {
+      await api.updateSettings({ limitHistoryToPlan: checked });
+      setHistoryMsg(
+        checked
+          ? "Lagret – historikk fra før programstart skjules nå."
+          : "Lagret – all historikk vises igjen."
+      );
+      onChange();
+    } catch (e) {
+      setLimitHistory(!checked);
+      setHistoryMsg(`Feil: ${(e as Error).message}`);
+    } finally {
+      setHistoryBusy(false);
+      setTimeout(() => setHistoryMsg(""), 5000);
+    }
+  }
 
   function toggleDay(key: string) {
     setDays((d) => {
@@ -351,6 +376,40 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
           {homeMsg && (
             <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}>
               {homeMsg}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Historikk</h3>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {limitHistory ? "Fra programstart" : "Alt vises"}
+          </span>
+        </div>
+        <div className="card-body">
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={limitHistory}
+              disabled={historyBusy}
+              onChange={(e) => saveLimitHistory(e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                Vis kun historikk fra programstart
+              </span>
+              <span className="muted" style={{ display: "block", fontSize: 13, marginTop: 3 }}>
+                Skjuler økter, rekorder, vekt og grafer fra før programmets første økt.
+                Ingenting slettes – slå av bryteren for å se alt igjen.
+              </span>
+            </span>
+          </label>
+          {historyMsg && (
+            <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}>
+              {historyMsg}
             </p>
           )}
         </div>
