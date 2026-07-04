@@ -90,6 +90,15 @@ export interface Settings {
   limitHistoryToPlan?: boolean;
 }
 
+export interface GeoHit {
+  name: string;
+  type: string;
+  municipality: string | null;
+  county: string | null;
+  lat: number;
+  lon: number;
+}
+
 export interface RecordEntry {
   key: string;
   label: string;
@@ -271,6 +280,7 @@ export const api = {
 
   // settings
   settings: () => req<Settings>("/api/settings"),
+  geoSearch: (q: string) => req<{ hits: GeoHit[] }>(`/api/geo/search?q=${encodeURIComponent(q)}`),
   updateSettings: (
     data: Partial<Settings["training"]> & {
       homeLat?: number | null;

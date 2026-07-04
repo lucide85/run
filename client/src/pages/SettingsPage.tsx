@@ -1,9 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, Settings } from "../api/client";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { api, GeoHit, Settings } from "../api/client";
 import { PageTitle, Spinner, Button } from "../components/ui";
 import { WEEKDAYS, dateNo } from "../lib/format";
 import { computeZones, ZONE_COLORS } from "../lib/zones";
+
+// Kartnål uten bildefiler (Leaflets standardikoner krever asset-oppsett)
+const PIN_ICON = L.divIcon({
+  html: "📍",
+  className: "map-pin-emoji",
+  iconSize: [28, 28],
+  iconAnchor: [14, 26],
+});
 
 export default function SettingsPage({ onChange }: { onChange: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -27,6 +37,12 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
   const [limitHistory, setLimitHistory] = useState(false);
   const [historyMsg, setHistoryMsg] = useState("");
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [geoHits, setGeoHits] = useState<GeoHit[]>([]);
+  const [geoBusy, setGeoBusy] = useState(false);
+  const suppressSearch = useRef(false);
+  const mapDivRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const pinRef = useRef<L.Marker | null>(null);
 
   async function load() {
     const s = await api.settings();
@@ -127,6 +143,77 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
       setGBusy(false);
     }
   }
+
+  // Stedssøk (Kartverket via serveren), debouncet mens man skriver
+  useEffect(() => {
+    if (suppressSearch.current) {
+      suppressSearch.current = false;
+      return;
+    }
+    const q = homePlace.trim();
+    if (q.length < 2) {
+      setGeoHits([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setGeoBusy(true);
+      try {
+        const r = await api.geoSearch(q);
+        setGeoHits(r.hits);
+      } catch {
+        setGeoHits([]);
+      } finally {
+        setGeoBusy(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [homePlace]);
+
+  function applyGeoHit(hit: GeoHit) {
+    suppressSearch.current = true;
+    setHomePlace(hit.name);
+    setHomeLat(String(hit.lat));
+    setHomeLon(String(hit.lon));
+    setGeoHits([]);
+  }
+
+  // Kart med nål: initieres når kortet er synlig, ryddes ved unmount
+  useEffect(() => {
+    if (!settings || !mapDivRef.current || mapRef.current) return;
+    const map = L.map(mapDivRef.current, { attributionControl: true, scrollWheelZoom: false });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(map);
+    map.setView([64.7, 13.2], 4); // Norge
+    map.on("click", (e: L.LeafletMouseEvent) => {
+      setHomeLat(String(Math.round(e.latlng.lat * 10000) / 10000));
+      setHomeLon(String(Math.round(e.latlng.lng * 10000) / 10000));
+    });
+    mapRef.current = map;
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      pinRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings === null]);
+
+  // Flytt nålen når koordinatene endres (søk, klikk, posisjon eller manuelt)
+  useEffect(() => {
+    const map = mapRef.current;
+    const lat = parseFloat(homeLat.replace(",", "."));
+    const lon = parseFloat(homeLon.replace(",", "."));
+    if (!map || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    if (!pinRef.current) {
+      pinRef.current = L.marker([lat, lon], { icon: PIN_ICON }).addTo(map);
+      map.setView([lat, lon], 11);
+    } else {
+      pinRef.current.setLatLng([lat, lon]);
+      map.panTo([lat, lon]);
+      if (map.getZoom() < 8) map.setZoom(11);
+    }
+  }, [homeLat, homeLon]);
 
   function useMyPosition() {
     setHomeMsg("");
@@ -324,16 +411,76 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
         <div className="card-body">
           <p className="muted" style={{ fontSize: 13.5, marginTop: 0, marginBottom: 14 }}>
             Sett hvor du pleier å løpe, så viser vi værmelding fra yr på de kommende øktene dine.
+            Søk etter et norsk stedsnavn, klikk i kartet, eller fyll inn koordinater.
           </p>
-          <div className="field" style={{ marginBottom: 12 }}>
-            <label>Stedsnavn (valgfritt)</label>
+          <div className="field" style={{ marginBottom: 12, position: "relative" }}>
+            <label>Sted (søk i norske stedsnavn)</label>
             <input
               className="input"
               value={homePlace}
               onChange={(e) => setHomePlace(e.target.value)}
               placeholder="F.eks. Bergen"
+              autoComplete="off"
             />
+            {geoBusy && (
+              <span className="muted" style={{ position: "absolute", right: 10, top: 34, fontSize: 12 }}>
+                søker…
+              </span>
+            )}
+            {geoHits.length > 0 && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  zIndex: 1200,
+                  background: "#fff",
+                  border: "1px solid var(--border, #e3e8ee)",
+                  borderRadius: 10,
+                  boxShadow: "0 8px 24px rgba(15,40,60,0.14)",
+                  overflow: "hidden",
+                }}
+              >
+                {geoHits.map((h, i) => (
+                  <button
+                    key={`${h.name}-${h.municipality}-${i}`}
+                    type="button"
+                    onClick={() => applyGeoHit(h)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "9px 12px",
+                      border: "none",
+                      borderTop: i > 0 ? "1px solid var(--border, #eef1f5)" : "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      font: "inherit",
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>{h.name}</span>
+                    <span className="muted" style={{ fontSize: 12.5, marginLeft: 8 }}>
+                      {[h.municipality, h.county].filter(Boolean).join(", ")}
+                      {h.type ? ` · ${h.type.toLowerCase()}` : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+          <div
+            ref={mapDivRef}
+            style={{
+              height: 240,
+              borderRadius: 12,
+              marginBottom: 12,
+              border: "1px solid var(--border, #e3e8ee)",
+              overflow: "hidden",
+              zIndex: 0,
+            }}
+            aria-label="Kart – klikk for å sette hjemsted"
+          />
           <div className="grid g2" style={{ marginBottom: 12 }}>
             <div className="field">
               <label>Breddegrad (lat)</label>
