@@ -3,19 +3,17 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Legend,
 } from "recharts";
 import { api, Workout, WeightLog } from "../api/client";
-import { PageTitle, Spinner, Button } from "../components/ui";
-import { pace, dateShort } from "../lib/format";
+import { PageTitle, Spinner, Button, Card } from "../components/ui";
+import { pace, dateShort, isoWeek, isoWeekYear } from "../lib/format";
 
 const C_PACE = "#2C4894"; // secondary
 const C_VOL = "#7A52CC"; // langtur
 const C_HR = "#D7263D"; // løp
 const C_WEIGHT = "#008094"; // primary
 
-function weekKey(iso: string): string {
-  const d = new Date(iso);
-  const onejan = new Date(d.getFullYear(), 0, 1);
-  const week = Math.ceil(((d.getTime() - onejan.getTime()) / 86400000 + onejan.getDay() + 1) / 7);
-  return `U${week}`;
+/** Dagens dato som «YYYY-MM-DD» i lokal tid (toISOString gir gårsdagen før kl. 01/02). */
+function localDateStr(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function ChartCard({ title, sub, children, foot }: { title: string; sub?: string; children: ReactNode; foot?: ReactNode }) {
@@ -37,14 +35,23 @@ export default function Progress() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [weights, setWeights] = useState<WeightLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [wDate, setWDate] = useState(new Date().toISOString().slice(0, 10));
+  const [error, setError] = useState<string | null>(null);
+  const [wDate, setWDate] = useState(localDateStr());
   const [wVal, setWVal] = useState("");
+  const [wError, setWError] = useState("");
+  const [wSaved, setWSaved] = useState(false);
 
   async function load() {
-    const [w, wl] = await Promise.all([api.workouts(), api.weight()]);
-    setWorkouts([...w].reverse());
-    setWeights(wl);
-    setLoading(false);
+    setError(null);
+    try {
+      const [w, wl] = await Promise.all([api.workouts(), api.weight()]);
+      setWorkouts([...w].reverse());
+      setWeights(wl);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     load();
@@ -53,26 +60,61 @@ export default function Progress() {
   async function addWeight() {
     const v = parseFloat(wVal.replace(",", "."));
     if (!v) return;
-    await api.addWeight(new Date(wDate).toISOString(), v);
-    setWVal("");
-    await load();
+    setWError("");
+    setWSaved(false);
+    try {
+      await api.addWeight(new Date(wDate).toISOString(), v);
+      setWVal("");
+      setWSaved(true);
+      setTimeout(() => setWSaved(false), 2500);
+      await load();
+    } catch (e) {
+      setWError((e as Error).message);
+    }
   }
 
   if (loading) return <Spinner />;
+  if (error)
+    return (
+      <Card>
+        <p style={{ marginTop: 0, fontSize: 14 }}>Kunne ikke laste innhold.</p>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setLoading(true);
+            load();
+          }}
+        >
+          <i className="fa-solid fa-arrows-rotate" />
+          Prøv igjen
+        </Button>
+      </Card>
+    );
 
   const paceData = workouts
     .filter((w) => w.avgPaceSecPerKm)
     .map((w) => ({ date: dateShort(w.startTime), pace: w.avgPaceSecPerKm, km: w.distanceKm }));
 
-  const volumeMap = new Map<string, number>();
+  // Ukevolum nøklet på ISO-år + ISO-uke, slik at «uke 2» i fjor og i år ikke slås sammen
+  const volumeMap = new Map<string, { week: string; km: number }>();
   for (const w of workouts) {
-    const k = weekKey(w.startTime);
-    volumeMap.set(k, (volumeMap.get(k) ?? 0) + (w.distanceKm ?? 0));
+    const d = new Date(w.startTime);
+    const k = `${isoWeekYear(d)}-W${isoWeek(d)}`;
+    const cur = volumeMap.get(k);
+    if (cur) cur.km += w.distanceKm ?? 0;
+    else volumeMap.set(k, { week: `U${isoWeek(d)}`, km: w.distanceKm ?? 0 });
   }
-  const volumeData = [...volumeMap.entries()].map(([week, km]) => ({ week, km: Math.round(km * 10) / 10 }));
+  const volumeData = [...volumeMap.values()]
+    .map(({ week, km }) => ({ week, km: Math.round(km * 10) / 10 }))
+    .slice(-26); // maks de siste 26 ukene
 
-  const effData = workouts
-    .filter((w) => w.avgHr && w.avgPaceSecPerKm && (w.sport ?? "").toLowerCase().includes("run"))
+  // Intervalløkter holdes utenfor – snittpuls/-tempo for en intervalløkt sier lite om formen
+  const effSource = workouts.filter(
+    (w) => w.avgHr && w.avgPaceSecPerKm && (w.sport ?? "").toLowerCase().includes("run")
+  );
+  const effExcluded = effSource.some((w) => w.plannedSession?.type === "quality");
+  const effData = effSource
+    .filter((w) => w.plannedSession?.type !== "quality")
     .map((w) => ({ date: dateShort(w.startTime), hr: w.avgHr, pace: w.avgPaceSecPerKm }));
 
   const weightData = weights.map((w) => ({ date: dateShort(w.date), kg: w.weightKg }));
@@ -114,7 +156,17 @@ export default function Progress() {
           )}
         </ChartCard>
 
-        <ChartCard title="Puls vs. tempo (løp)" sub="Bedre form = lavere puls ved samme tempo over tid.">
+        <ChartCard
+          title="Puls vs. tempo (løp)"
+          sub="Bedre form = lavere puls ved samme tempo over tid."
+          foot={
+            effExcluded ? (
+              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Intervalløkter er holdt utenfor.
+              </div>
+            ) : undefined
+          }
+        >
           {effData.length === 0 ? (
             <Empty />
           ) : (
@@ -142,7 +194,15 @@ export default function Progress() {
               <input className="input" type="date" value={wDate} onChange={(e) => setWDate(e.target.value)} style={{ flex: "1 1 150px" }} />
               <input className="input" value={wVal} onChange={(e) => setWVal(e.target.value)} placeholder="kg" inputMode="decimal" style={{ flex: "0 0 90px" }} />
               <Button onClick={addWeight}>Logg</Button>
+              {wSaved && (
+                <span style={{ color: "var(--t-fullfort)", fontSize: 13, fontWeight: 600 }}>Lagret ✓</span>
+              )}
             </div>
+            {wError && (
+              <p style={{ color: "var(--error-500)", fontSize: 13, marginTop: 0, marginBottom: 12 }}>
+                Kunne ikke lagre vekten: {wError}
+              </p>
+            )}
             {weightData.length === 0 ? (
               <Empty text="Logg vekten din for å se utviklingen." />
             ) : (

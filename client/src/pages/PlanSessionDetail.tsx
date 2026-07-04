@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, AiMessage, PlannedSession, Settings, Workout } from "../api/client";
-import { PageTitle, Spinner, TypeBadge, StatusBadge, Button } from "../components/ui";
+import { Card, PageTitle, Spinner, TypeBadge, StatusBadge, Button } from "../components/ui";
 import { dateNo, pace, dist, duration } from "../lib/format";
 import { computeZones, ZONE_COLORS, Zone } from "../lib/zones";
 import { Markdown } from "../components/Markdown";
@@ -55,18 +55,26 @@ export default function PlanSessionDetail() {
   const chatEnd = useRef<HTMLDivElement>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [linking, setLinking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   async function load() {
-    const [session, st, msgs, wos] = await Promise.all([
-      api.session(sid),
-      api.settings(),
-      api.sessionMessages(sid).catch(() => [] as AiMessage[]),
-      api.workouts().catch(() => [] as Workout[]),
-    ]);
-    setS(session);
-    setSettings(st);
-    setMessages(msgs);
-    setWorkouts(wos);
+    setError(null);
+    try {
+      const [session, st, msgs, wos] = await Promise.all([
+        api.session(sid),
+        api.settings(),
+        api.sessionMessages(sid).catch(() => [] as AiMessage[]),
+        api.workouts().catch(() => [] as Workout[]),
+      ]);
+      setS(session);
+      setSettings(st);
+      setMessages(msgs);
+      setWorkouts(wos);
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
     // Hent (eller generer) øktbeskrivelse – caches på serveren per økt + klokkemodell
     setTipsLoading(true);
     try {
@@ -85,6 +93,7 @@ export default function PlanSessionDetail() {
     setTipsError("");
     setMessages([]);
     setChatInput("");
+    setError(null);
     load();
   }, [sid]);
 
@@ -136,6 +145,28 @@ export default function PlanSessionDetail() {
     }
   }
 
+  async function setStatus(status: "completed" | "skipped" | "planned") {
+    setStatusBusy(true);
+    try {
+      await api.updateSession(sid, { status });
+      await load();
+    } catch (e) {
+      alert(`Kunne ikke oppdatere status: ${(e as Error).message}`);
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  if (error)
+    return (
+      <Card>
+        <p style={{ marginTop: 0, fontSize: 14 }}>Kunne ikke laste innhold.</p>
+        <Button variant="secondary" onClick={load}>
+          <i className="fa-solid fa-arrows-rotate" />
+          Prøv igjen
+        </Button>
+      </Card>
+    );
   if (!s || !settings) return <Spinner />;
 
   const zones = computeZones(settings.training.maxHr, settings.training.restHr);
@@ -145,23 +176,58 @@ export default function PlanSessionDetail() {
     s.targetPaceMinSec && s.targetPaceMaxSec ? `${pace(s.targetPaceMinSec)}–${pace(s.targetPaceMaxSec)} /km` : null;
 
   const w = s.workout ?? null;
+  const isQuality = s.type === "quality";
+
+  // Soneseconds fra økten – kan mangle eller være korrupt i eldre data
+  let zoneSecs: Record<string, number> | null = null;
+  if (w?.hrZoneSecondsJson) {
+    try {
+      zoneSecs = JSON.parse(w.hrZoneSecondsJson) as Record<string, number>;
+    } catch {
+      zoneSecs = null;
+    }
+  }
 
   // Tid i målsone for gjennomført økt
   let inZonePct: number | null = null;
-  if (w?.hrZoneSecondsJson && tz.length > 0) {
-    const zs = JSON.parse(w.hrZoneSecondsJson) as Record<string, number>;
-    const total = Object.values(zs).reduce((a, b) => a + b, 0);
+  if (zoneSecs && tz.length > 0) {
+    const total = Object.values(zoneSecs).reduce((a, b) => a + b, 0);
     if (total > 0) {
-      const inZone = tz.reduce((sum, z) => sum + (zs[String(z.zone)] ?? 0), 0);
+      const inZone = tz.reduce((sum, z) => sum + (zoneSecs![String(z.zone)] ?? 0), 0);
       inZonePct = Math.round((inZone / total) * 100);
     }
   }
 
-  const paceOk =
-    w?.avgPaceSecPerKm && s.targetPaceMinSec && s.targetPaceMaxSec
-      ? w.avgPaceSecPerKm >= s.targetPaceMinSec && w.avgPaceSecPerKm <= s.targetPaceMaxSec
-      : null;
-  const hrOk = w?.avgHr && tz.length > 0 ? w.avgHr >= tz[0].min && w.avgHr <= tz[tz.length - 1].max : null;
+  // For kvalitetsøkter er snittpuls/-tempo for hele økten misvisende – pausene
+  // drar snittet ned. Vurder i stedet tid i (eller over) laveste målsone.
+  let qualityHrOk: boolean | null = null;
+  let qualityHrText: string | null = null;
+  if (isQuality && w && tz.length > 0) {
+    if (zoneSecs) {
+      const minZone = tz[0].zone;
+      const secsAtOrAbove = Object.entries(zoneSecs).reduce(
+        (sum, [z, sec]) => (Number(z) >= minZone ? sum + (sec ?? 0) : sum),
+        0
+      );
+      const totalSec = w.durationSec ?? Object.values(zoneSecs).reduce((a, b) => a + b, 0);
+      qualityHrOk = secsAtOrAbove >= 8 * 60 || (totalSec > 0 && secsAtOrAbove / totalSec >= 0.2);
+      qualityHrText = `${Math.round(secsAtOrAbove / 60)} min i sone ${minZone}+`;
+    } else {
+      qualityHrText = "ukjent";
+    }
+  }
+
+  // For kvalitetsøkter er snitt-tempo mot dragtempo meningsløst – ingen advarsel
+  const paceOk = isQuality
+    ? null
+    : w?.avgPaceSecPerKm && s.targetPaceMinSec && s.targetPaceMaxSec
+    ? w.avgPaceSecPerKm >= s.targetPaceMinSec && w.avgPaceSecPerKm <= s.targetPaceMaxSec
+    : null;
+  const hrOk = isQuality
+    ? qualityHrOk
+    : w?.avgHr && tz.length > 0
+    ? w.avgHr >= tz[0].min && w.avgHr <= tz[tz.length - 1].max
+    : null;
 
   const check = (ok: boolean | null) =>
     ok == null ? null : ok ? (
@@ -271,9 +337,13 @@ export default function PlanSessionDetail() {
               </>
             )}
             {tips && !tipsLoading && (
-              <span className="link" onClick={regenerateTips}>
+              <button
+                className="link"
+                onClick={regenerateTips}
+                style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "inherit" }}
+              >
                 <i className="fa-solid fa-arrows-rotate" /> Oppdater
-              </span>
+              </button>
             )}
           </span>
         </div>
@@ -419,6 +489,34 @@ export default function PlanSessionDetail() {
             Overstyrer den automatiske matchingen. Velger du en økt som allerede er koblet til en annen dag, flyttes
             koblingen hit. Fullført-datoen settes til datoen økten faktisk ble gjennomført.
           </p>
+
+          {/* Manuell status – for økter uten (eller med angret) kobling */}
+          {!(s.status === "completed" && s.workoutId != null) && (
+            <div
+              className="flex gap8 wrap"
+              style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-subtle)" }}
+            >
+              {s.status === "skipped" ? (
+                <Button variant="secondary" size="sm" onClick={() => setStatus("planned")} disabled={statusBusy}>
+                  <i className="fa-solid fa-rotate-left" />
+                  Angre hoppet over
+                </Button>
+              ) : (
+                <>
+                  {s.status !== "completed" && (
+                    <Button variant="secondary" size="sm" onClick={() => setStatus("completed")} disabled={statusBusy}>
+                      <i className="fa-solid fa-check" />
+                      Marker som fullført
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setStatus("skipped")} disabled={statusBusy}>
+                    <i className="fa-solid fa-forward" />
+                    Hoppet over
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -453,7 +551,11 @@ export default function PlanSessionDetail() {
               "Puls",
               hrRange ?? "–",
               <>
-                {w.avgHr ? `${w.avgHr} bpm snitt` : "–"}
+                {isQuality && qualityHrText != null
+                  ? qualityHrText
+                  : w.avgHr
+                  ? `${w.avgHr} bpm snitt`
+                  : "–"}
                 {check(hrOk)}
               </>
             )}

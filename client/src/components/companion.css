@@ -1,0 +1,340 @@
+/* ============================================================
+   Treningskompis – animasjoner og layout
+   Importeres av Companion.tsx (og gjenbrukes av CompanionPage).
+   ============================================================ */
+
+@keyframes companion-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+
+@keyframes companion-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes companion-zzz {
+  0% { opacity: 0; transform: translate(0, 6px) scale(0.75); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(12px, -20px) scale(1.15); }
+}
+
+@keyframes companion-evolve {
+  0% { transform: scale(0.3); opacity: 0; }
+  55% { transform: scale(1.12); opacity: 1; }
+  75% { transform: scale(0.96); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes companion-overlay-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------- Kort på oversikten ---------- */
+
+.companion-card {
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.companion-row {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+.companion-figure-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.companion-figure {
+  display: block;
+  width: 130px;
+  height: 130px;
+  transform-origin: 50% 92%;
+  animation: companion-breathe 3.5s ease-in-out infinite;
+}
+
+/* Humør: jubler = hopper litt i tillegg, døser = roligere pust */
+.companion-figure-wrap.mood-jubler {
+  animation: companion-bob 1.6s ease-in-out infinite;
+}
+.companion-figure-wrap.mood-doser .companion-figure {
+  animation-duration: 5.5s;
+  opacity: 0.92;
+}
+
+.companion-zzz {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  font-size: 21px;
+  pointer-events: none;
+  animation: companion-zzz 2.8s ease-in-out infinite;
+}
+
+.companion-info {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.companion-kicker {
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--primary-500);
+}
+
+.companion-name {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.companion-streak {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--t-kvalitet);
+  background: var(--t-kvalitet-bg);
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+
+.companion-caption {
+  font-size: 13.5px;
+  color: var(--grey-600);
+  margin-top: 5px;
+}
+
+.companion-progress {
+  margin-top: 12px;
+  max-width: 340px;
+}
+
+.companion-progress-track {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--grey-200);
+  overflow: hidden;
+}
+
+.companion-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--primary-500), var(--primary-300));
+  transition: width 700ms var(--ease);
+}
+
+.companion-progress-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--grey-500);
+  margin-top: 6px;
+}
+
+.companion-link {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--primary-500);
+  text-decoration: none;
+  white-space: nowrap;
+  align-self: flex-start;
+}
+.companion-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Utviklingsseremoni (overlegg) ---------- */
+
+.companion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(10, 20, 24, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: companion-overlay-fade 0.25s ease-out;
+}
+
+.companion-overlay-inner {
+  background: var(--bg-surface);
+  border-radius: 20px;
+  padding: 32px 34px 28px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.companion-overlay-figure {
+  width: 180px;
+  height: 180px;
+  animation: companion-evolve 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  filter: drop-shadow(0 0 26px rgba(98, 201, 217, 0.75));
+}
+
+.companion-overlay-title {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.companion-overlay-desc {
+  font-size: 13.5px;
+  color: var(--grey-600);
+  margin-bottom: 6px;
+}
+
+/* ---------- Kompis-siden ---------- */
+
+.companion-hero {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  flex-wrap: wrap;
+  padding: 30px;
+}
+
+.companion-hero-figure {
+  display: block;
+  width: 220px;
+  height: 220px;
+  transform-origin: 50% 92%;
+  animation: companion-breathe 3.5s ease-in-out infinite;
+}
+
+.companion-hero-name {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.companion-hero-desc {
+  font-size: 14.5px;
+  color: var(--grey-600);
+  margin-top: 6px;
+  max-width: 520px;
+}
+
+/* Galleri med alle steg */
+.companion-gallery {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 4px 2px 10px;
+}
+
+.companion-gallery-item {
+  flex: 0 0 auto;
+  width: 110px;
+  text-align: center;
+  position: relative;
+  border-radius: 14px;
+  padding: 10px 6px 8px;
+}
+
+.companion-gallery-item.current {
+  background: var(--primary-50);
+  box-shadow: inset 0 0 0 2px var(--primary-300);
+}
+
+.companion-gallery-item img {
+  width: 84px;
+  height: 84px;
+  display: inline-block;
+}
+
+/* Låste (fremtidige) steg vises som mørke silhuetter */
+.companion-gallery-item.locked img {
+  filter: brightness(0);
+  opacity: 0.25;
+}
+
+.companion-gallery-q {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  right: 0;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--grey-500);
+  pointer-events: none;
+}
+
+.companion-gallery-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+.companion-gallery-item.locked .companion-gallery-name {
+  color: var(--grey-400);
+}
+
+.companion-gallery-req {
+  font-size: 11px;
+  color: var(--grey-500);
+  margin-top: 2px;
+}
+
+/* Tidslinje */
+.companion-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.companion-timeline li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13.5px;
+}
+
+.companion-timeline .dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--primary-500);
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+/* ---------- Redusert bevegelse ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .companion-figure,
+  .companion-figure-wrap,
+  .companion-hero-figure,
+  .companion-zzz,
+  .companion-overlay,
+  .companion-overlay-figure {
+    animation: none !important;
+  }
+  .companion-progress-fill {
+    transition: none;
+  }
+}

@@ -68,7 +68,20 @@ export async function resetPassword(userId: number): Promise<string> {
 }
 
 export function verifyPassword(user: User, plain: string): boolean {
+  if (typeof plain !== "string" || !plain) return false;
   return bcrypt.compareSync(plain, user.passwordHash);
+}
+
+// Fast hash brukt for å utligne svartid når e-posten ikke finnes
+// (ellers avslører responstiden hvilke kontoer som eksisterer).
+const DUMMY_HASH = bcrypt.hashSync("dummy-password-for-timing", 10);
+
+export function verifyDummyPassword(plain: string): void {
+  try {
+    bcrypt.compareSync(plain, DUMMY_HASH);
+  } catch {
+    /* kun for timing */
+  }
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {

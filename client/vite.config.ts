@@ -35,7 +35,7 @@ export default defineConfig({
         // SPA-fallback til index.html, men aldri for API-kall.
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//],
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2,webp}"],
         // Ikke cache API-svar – Garmin/AI/plan skal alltid hentes live.
         runtimeCaching: [],
       },

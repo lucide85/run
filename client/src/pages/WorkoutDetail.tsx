@@ -6,7 +6,7 @@ import {
   Area, ComposedChart,
 } from "recharts";
 import { api, WorkoutDetail as WD, AiMessage, Settings } from "../api/client";
-import { PageTitle, Stat, Spinner, Button, TypeBadge } from "../components/ui";
+import { Card, PageTitle, Stat, Spinner, Button, TypeBadge } from "../components/ui";
 import { dateNo, dist, duration, pace } from "../lib/format";
 import { computeZones, zoneSecondsFromStreams, ZONE_COLORS } from "../lib/zones";
 import { Markdown } from "../components/Markdown";
@@ -14,6 +14,35 @@ import { Markdown } from "../components/Markdown";
 const C_HR = "#D7263D";
 const C_PACE = "#2C4894";
 const C_ELEV = "#0E8540";
+
+// Merkelapper for runde-roller fra serveren (intervall-deteksjon)
+const LAP_ROLES: Record<string, { label: string; color: string; bg: string }> = {
+  work: { label: "Drag", color: "var(--primary-600)", bg: "var(--primary-100)" },
+  recovery: { label: "Pause", color: "var(--grey-600)", bg: "var(--grey-100)" },
+  warmup: { label: "Oppv.", color: "var(--grey-600)", bg: "var(--grey-100)" },
+  cooldown: { label: "Nedj.", color: "var(--grey-600)", bg: "var(--grey-100)" },
+};
+
+function LapRoleBadge({ role }: { role?: string }) {
+  const r = role ? LAP_ROLES[role] : undefined;
+  if (!r) return null;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        fontSize: 11,
+        fontWeight: role === "work" ? 800 : 600,
+        color: r.color,
+        background: r.bg,
+        borderRadius: 9999,
+        padding: "2px 9px",
+        letterSpacing: 0.2,
+      }}
+    >
+      {r.label}
+    </span>
+  );
+}
 
 export default function WorkoutDetail() {
   const { id } = useParams();
@@ -23,6 +52,8 @@ export default function WorkoutDetail() {
   const [deleting, setDeleting] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [evaluating, setEvaluating] = useState(false);
   const [chatInput, setChatInput] = useState("");
@@ -32,16 +63,35 @@ export default function WorkoutDetail() {
   const [showSeries, setShowSeries] = useState({ alt: true, hr: true, pace: false });
   const [fs, setFs] = useState(false);
 
-  async function load() {
-    const [data, st] = await Promise.all([api.workout(wid), api.settings()]);
-    setW(data);
-    setSettings(st);
-    setMessages(data.aiMessages);
-    setLoading(false);
-  }
   useEffect(() => {
-    load();
-  }, [wid]);
+    // Nullstill før lasting, ellers vises forrige økt mens den nye hentes
+    setLoading(true);
+    setW(null);
+    setMessages([]);
+    setError(null);
+    setChatInput("");
+    if (!Number.isFinite(wid)) {
+      setLoading(false);
+      return;
+    }
+    let alive = true; // ignorer svar som kommer etter at brukeren har navigert videre
+    (async () => {
+      try {
+        const [data, st] = await Promise.all([api.workout(wid), api.settings()]);
+        if (!alive) return;
+        setW(data);
+        setSettings(st);
+        setMessages(data.aiMessages);
+      } catch (e) {
+        if (alive) setError((e as Error).message);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [wid, reloadKey]);
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth" });
@@ -95,6 +145,26 @@ export default function WorkoutDetail() {
     }
   }
 
+  if (!Number.isFinite(wid))
+    return (
+      <Card>
+        <p style={{ marginTop: 0, fontSize: 14 }}>Ikke funnet.</p>
+        <Link to="/okter" className="btn btn-ghost">
+          <i className="fa-solid fa-arrow-left" />
+          Alle økter
+        </Link>
+      </Card>
+    );
+  if (error)
+    return (
+      <Card>
+        <p style={{ marginTop: 0, fontSize: 14 }}>Kunne ikke laste innhold.</p>
+        <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
+          <i className="fa-solid fa-arrows-rotate" />
+          Prøv igjen
+        </Button>
+      </Card>
+    );
   if (loading || !w || !settings) return <Spinner />;
 
   const feedback = messages.filter((m) => m.kind === "feedback");
@@ -103,6 +173,7 @@ export default function WorkoutDetail() {
   // Felles forløpsdata med distanse (km) som x-akse. Bruk distanceKm fra strømmen,
   // ellers rekonstruer kumulativ distanse fra tempo over tid (eldre økter).
   const hasAltitude = w.streams.some((p) => p.altitude != null);
+  const hasHr = w.streams.some((p) => p.hr != null);
   let cumKm = 0;
   const flow = w.streams.map((p, i) => {
     if (i > 0) {
@@ -118,13 +189,33 @@ export default function WorkoutDetail() {
       altitude: p.altitude ?? null,
     };
   });
-  const show = { alt: showSeries.alt && hasAltitude, hr: showSeries.hr, pace: showSeries.pace };
+  const show = {
+    alt: showSeries.alt && hasAltitude,
+    hr: showSeries.hr && hasHr,
+    // Uten både høyde- og pulsdata vises tempo som standard, ellers blir grafen tom
+    pace: showSeries.pace || (!hasAltitude && !hasHr),
+  };
 
   const zones = computeZones(settings.training.maxHr, settings.training.restHr);
   const zoneSeconds = zoneSecondsFromStreams(w.streams, zones);
   const zoneData = zones
     .map((z) => ({ zone: `S${z.zone}`, idx: z.zone, min: Math.round((zoneSeconds[z.zone] ?? 0) / 60) }))
     .filter((z) => z.min > 0);
+
+  // Oppsummering av dragene når serveren har gjenkjent økten som intervaller
+  const wsum = w.workSummary && w.workSummary.count > 0 ? w.workSummary : null;
+  const workStatValue = wsum
+    ? `${wsum.count}${wsum.avgWorkDurationSec != null ? ` × ${duration(Math.round(wsum.avgWorkDurationSec))}` : ""}${
+        wsum.avgWorkPaceSecPerKm != null ? ` @ ${pace(wsum.avgWorkPaceSecPerKm)}/km` : ""
+      }`
+    : null;
+  const workStatHint = wsum
+    ? wsum.avgWorkHr != null
+      ? `snittpuls i drag ${Math.round(wsum.avgWorkHr)}`
+      : wsum.avgRecoverySec != null
+      ? `snittpause ${duration(Math.round(wsum.avgRecoverySec))}`
+      : undefined
+    : undefined;
 
   const flowChart = (
     <ResponsiveContainer width="100%" height="100%">
@@ -188,7 +279,7 @@ export default function WorkoutDetail() {
   );
 
   const toggle = (k: "alt" | "hr" | "pace", color: string, label: string) => {
-    const disabled = k === "alt" && !hasAltitude;
+    const disabled = (k === "alt" && !hasAltitude) || (k === "hr" && !hasHr);
     const on = show[k];
     return (
       <button
@@ -219,7 +310,7 @@ export default function WorkoutDetail() {
   const toggles = (
     <div className="flex gap8 wrap" style={{ marginBottom: 12 }}>
       {toggle("alt", C_ELEV, hasAltitude ? "Høyde" : "Høyde (ingen data)")}
-      {toggle("hr", C_HR, "Puls")}
+      {toggle("hr", C_HR, hasHr ? "Puls" : "Puls (ingen data)")}
       {toggle("pace", C_PACE, "Tempo")}
     </div>
   );
@@ -258,6 +349,7 @@ export default function WorkoutDetail() {
         <Stat label="Tid" value={duration(w.durationSec)} />
         <Stat label="Snittempo" value={`${pace(w.avgPaceSecPerKm)} /km`} />
         <Stat label="Snitt / maks puls" value={`${w.avgHr ?? "–"} / ${w.maxHr ?? "–"}`} />
+        {workStatValue && <Stat label="Drag" value={workStatValue} hint={workStatHint} />}
       </div>
 
       {/* Kombinert forløp: puls · tempo · høyde, distanse på x-aksen, av/på per serie */}
@@ -268,9 +360,13 @@ export default function WorkoutDetail() {
             <span className="muted" style={{ fontSize: 12 }}>
               total stigning {w.elevationGainM != null ? `${Math.round(w.elevationGainM)} m` : "–"}
             </span>
-            <span className="link" onClick={() => setFs(true)}>
+            <button
+              className="link"
+              onClick={() => setFs(true)}
+              style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit" }}
+            >
               <i className="fa-solid fa-up-right-and-down-left-from-center" /> Fullskjerm
-            </span>
+            </button>
           </div>
         </div>
         <div className="card-body">
@@ -287,19 +383,25 @@ export default function WorkoutDetail() {
           </span>
         </div>
         <div className="card-body">
-          <ResponsiveContainer width="100%" height={210}>
-            <BarChart data={zoneData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ECEDEE" />
-              <XAxis dataKey="zone" tick={{ fontSize: 12 }} stroke="#CACACE" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#CACACE" />
-              <Tooltip formatter={(v) => [`${v} min`, "Tid"]} />
-              <Bar dataKey="min" radius={[6, 6, 0, 0]}>
-                {zoneData.map((z) => (
-                  <Cell key={z.idx} fill={ZONE_COLORS[z.idx - 1]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {zoneData.length === 0 ? (
+            <p className="muted" style={{ margin: 0, textAlign: "center", padding: "30px 10px", fontSize: 13.5 }}>
+              Ingen pulsdata for denne økten.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={210}>
+              <BarChart data={zoneData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#ECEDEE" />
+                <XAxis dataKey="zone" tick={{ fontSize: 12 }} stroke="#CACACE" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#CACACE" />
+                <Tooltip formatter={(v) => [`${v} min`, "Tid"]} />
+                <Bar dataKey="min" radius={[6, 6, 0, 0]}>
+                  {zoneData.map((z) => (
+                    <Cell key={z.idx} fill={ZONE_COLORS[z.idx - 1]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
           <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 12 }}>
             {zones.map((z) => (
               <div key={z.zone} className="flex items-center gap8">
@@ -326,35 +428,46 @@ export default function WorkoutDetail() {
           document.body
         )}
 
-      {w.laps.length > 1 && (
-        <div className="card" style={{ marginTop: 18, overflow: "hidden" }}>
-          <div className="card-head">
-            <h3>Runder</h3>
-          </div>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th className="r">Distanse</th>
-                <th className="r">Tid</th>
-                <th className="r">Tempo</th>
-                <th className="r">Puls</th>
-              </tr>
-            </thead>
-            <tbody>
-              {w.laps.map((l) => (
-                <tr key={l.index}>
-                  <td>{l.index}</td>
-                  <td className="r tnum">{dist(l.distanceKm)}</td>
-                  <td className="r tnum">{duration(l.durationSec)}</td>
-                  <td className="r tnum">{pace(l.avgPaceSecPerKm)}</td>
-                  <td className="r tnum">{l.avgHr ?? "–"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {w.laps.length > 1 &&
+        (() => {
+          // Type-kolonnen vises bare når serveren faktisk har rolle-info (eldre svar mangler den)
+          const hasRoles = w.laps.some((l) => l.role && l.role !== "unknown");
+          return (
+            <div className="card" style={{ marginTop: 18, overflow: "hidden" }}>
+              <div className="card-head">
+                <h3>Runder</h3>
+              </div>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    {hasRoles && <th>Type</th>}
+                    <th className="r">Distanse</th>
+                    <th className="r">Tid</th>
+                    <th className="r">Tempo</th>
+                    <th className="r">Puls</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {w.laps.map((l) => (
+                    <tr key={l.index} style={l.role === "work" ? { fontWeight: 700 } : undefined}>
+                      <td>{l.index}</td>
+                      {hasRoles && (
+                        <td>
+                          <LapRoleBadge role={l.role} />
+                        </td>
+                      )}
+                      <td className="r tnum">{dist(l.distanceKm)}</td>
+                      <td className="r tnum">{duration(l.durationSec)}</td>
+                      <td className="r tnum">{pace(l.avgPaceSecPerKm)}</td>
+                      <td className="r tnum">{l.avgHr ?? "–"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
 
       {/* AI-vurdering og chat */}
       <div className="card" style={{ marginTop: 18 }}>

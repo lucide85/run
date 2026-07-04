@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, PlannedSession, Settings, Workout } from "../api/client";
-import { PageTitle, Spinner, Ring, TypeBadge } from "../components/ui";
+import { api, Me, PlannedSession, Settings, Workout } from "../api/client";
+import { Button, PageTitle, Spinner, Ring, TypeBadge } from "../components/ui";
 import { dateNo, dist, pace, SESSION_COLORS } from "../lib/format";
 import { SyncButton } from "../components/SyncButton";
+import { Companion } from "../components/Companion";
+
+// Modul-nivå vakt så auto-synk bare fyres én gang per sidelast
+// (React StrictMode dobbeltmonterer effekter i dev).
+let autoSyncAttempted = false;
 
 function daysUntil(iso: string): number {
   const ms = new Date(iso).getTime() - Date.now();
@@ -24,21 +29,67 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<PlannedSession[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  async function load() {
-    const [s, w, st] = await Promise.all([api.sessions(), api.workouts(), api.settings()]);
-    setSessions(s);
-    setWorkouts(w);
-    setSettings(st);
-    setLoading(false);
+  async function load(): Promise<Settings | null> {
+    try {
+      setError(false);
+      const [s, w, st, m] = await Promise.all([api.sessions(), api.workouts(), api.settings(), api.me()]);
+      setSessions(s);
+      setWorkouts(w);
+      setSettings(st);
+      setMe(m);
+      return st;
+    } catch (e) {
+      console.warn("Kunne ikke laste oversikten:", e);
+      setError(true);
+      return null;
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    load();
+    (async () => {
+      const st = await load();
+      // Auto-synk ved åpning: kun hvis Garmin er koblet til og siste synk
+      // mangler eller er eldre enn 30 minutter. Stille feil – aldri blokkerende.
+      if (!st || autoSyncAttempted || !st.garminConnected) return;
+      const last = st.lastSync ? new Date(st.lastSync).getTime() : NaN;
+      const fresh = Number.isFinite(last) && Date.now() - last < 30 * 60 * 1000;
+      if (fresh) return;
+      autoSyncAttempted = true;
+      try {
+        await api.sync();
+        await load();
+      } catch (e) {
+        console.warn("Automatisk Garmin-synk feilet:", e);
+      }
+    })();
   }, []);
 
-  if (loading || !settings) return <Spinner />;
+  if (loading) return <Spinner />;
+
+  if (error || !settings) {
+    return (
+      <div>
+        <PageTitle title="Oversikt" />
+        <div className="card card-pad" style={{ maxWidth: 420 }}>
+          <p className="muted" style={{ marginTop: 0 }}>Kunne ikke laste innhold.</p>
+          <Button
+            onClick={() => {
+              setLoading(true);
+              load();
+            }}
+          >
+            Prøv igjen
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const thisWeek = isoWeek(new Date());
   const upcoming = sessions
@@ -53,7 +104,17 @@ export default function Dashboard() {
 
   const weekSessions = sessions.filter((s) => isoWeek(new Date(s.date)) === thisWeek);
   const weekDone = weekSessions.filter((s) => s.status === "completed").length;
-  const weekTotal = weekSessions.length || 3;
+  const weekTotal = weekSessions.length;
+
+  // Forsinkede økter: planlagt/flyttet med dato før i dag (siste 14 dager)
+  const todayStart = new Date(new Date().toDateString()).getTime();
+  const overdue = sessions
+    .filter((s) => s.status === "planned" || s.status === "moved")
+    .filter((s) => {
+      const day = new Date(new Date(s.date).toDateString()).getTime();
+      return Number.isFinite(day) && day < todayStart && day >= todayStart - 14 * 86400000;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const next = upcoming[0];
   const raceDays = settings.race.date ? daysUntil(settings.race.date) : null;
@@ -146,6 +207,9 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Treningskompis */}
+      <Companion sessions={sessions} workouts={workouts} userId={me?.id} />
+
       {/* Stat tiles */}
       <div className="grid g4 stats-grid" style={{ marginBottom: 18 }}>
         <div className="stat fadein">
@@ -153,13 +217,19 @@ export default function Dashboard() {
             <i className="fa-solid fa-bullseye" />
           </div>
           <div className="label">Ukens mål</div>
-          <div className="val tnum">
-            {weekDone}
-            <small> / {weekTotal} økter</small>
-          </div>
-          <div style={{ height: 6, borderRadius: 99, background: "var(--grey-200)", marginTop: 10, overflow: "hidden" }}>
-            <div style={{ width: `${Math.min(100, (weekDone / weekTotal) * 100)}%`, height: "100%", background: "var(--primary-500)", borderRadius: 99 }} />
-          </div>
+          {weekTotal === 0 ? (
+            <div style={{ fontSize: 15, fontWeight: 700, marginTop: 6 }}>Ingen økter denne uken 😌</div>
+          ) : (
+            <>
+              <div className="val tnum">
+                {weekDone}
+                <small> / {weekTotal} økter</small>
+              </div>
+              <div style={{ height: 6, borderRadius: 99, background: "var(--grey-200)", marginTop: 10, overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(100, (weekDone / weekTotal) * 100)}%`, height: "100%", background: "var(--primary-500)", borderRadius: 99 }} />
+              </div>
+            </>
+          )}
         </div>
         <div className="stat fadein">
           <div className="ico" style={{ background: "var(--t-fullfort-bg)", color: "var(--t-fullfort)" }}>
@@ -194,6 +264,43 @@ export default function Dashboard() {
           <div className="foot">Garmin</div>
         </div>
       </div>
+
+      {/* Forsinkede økter */}
+      {overdue.length > 0 && (
+        <div
+          className="card fadein"
+          style={{ marginBottom: 18, background: "var(--t-kvalitet-bg)", borderColor: "var(--t-kvalitet)" }}
+        >
+          <div className="card-head">
+            <h3>
+              <i className="fa-solid fa-triangle-exclamation" style={{ color: "var(--t-kvalitet)", marginRight: 8 }} />
+              Forsinkede økter
+            </h3>
+          </div>
+          <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {overdue.map((s) => (
+              <Link
+                key={s.id}
+                to={`/plan/${s.id}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  textDecoration: "none",
+                  color: "inherit",
+                  fontSize: 13.5,
+                }}
+              >
+                <span style={{ fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.title}
+                </span>
+                <span className="muted" style={{ whiteSpace: "nowrap" }}>{dateNo(s.date)}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Two columns */}
       <div className="grid g2">

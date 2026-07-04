@@ -1,0 +1,57 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title1">
+  <title id="title1">Nøstet – steg 1</title>
+  <defs>
+    <radialGradient id="body1" cx="0.35" cy="0.28" r="0.95">
+      <stop offset="0%" stop-color="#AEEAF2"/>
+      <stop offset="50%" stop-color="#4FBCCD"/>
+      <stop offset="100%" stop-color="#00768A"/>
+    </radialGradient>
+    <radialGradient id="shell1" cx="0.35" cy="0.2" r="1">
+      <stop offset="0%" stop-color="#FFFEF8"/>
+      <stop offset="55%" stop-color="#FBEED4"/>
+      <stop offset="100%" stop-color="#E2BE8C"/>
+    </radialGradient>
+  </defs>
+
+  <!-- bakkeskygge -->
+  <ellipse cx="200" cy="356" rx="98" ry="16" fill="#0A3A42" opacity="0.14"/>
+
+  <!-- blob-hode som titter opp av skallet -->
+  <path d="M200 94 C 268 94 302 158 302 232 L 302 272 L 98 272 L 98 232 C 98 158 132 94 200 94 Z" fill="url(#body1)"/>
+
+  <!-- liten dusk på hodet -->
+  <path d="M198 96 C 199 76 210 66 224 62 C 213 76 210 86 211 98 Z" fill="#00768A"/>
+
+  <!-- høylys -->
+  <ellipse cx="158" cy="140" rx="22" ry="36" fill="#FFFFFF" opacity="0.55" transform="rotate(-18 158 140)"/>
+  <circle cx="182" cy="118" r="6" fill="#FFFFFF" opacity="0.4"/>
+
+  <!-- øyne -->
+  <ellipse cx="166" cy="196" rx="17" ry="20" fill="#22333B"/>
+  <circle cx="160" cy="188" r="6.5" fill="#FFFFFF"/>
+  <circle cx="172" cy="203" r="2.6" fill="#FFFFFF" opacity="0.9"/>
+  <ellipse cx="234" cy="196" rx="17" ry="20" fill="#22333B"/>
+  <circle cx="228" cy="188" r="6.5" fill="#FFFFFF"/>
+  <circle cx="240" cy="203" r="2.6" fill="#FFFFFF" opacity="0.9"/>
+
+  <!-- kinn -->
+  <ellipse cx="136" cy="222" rx="12" ry="7" fill="#FF9F68" opacity="0.4"/>
+  <ellipse cx="264" cy="222" rx="12" ry="7" fill="#FF9F68" opacity="0.4"/>
+
+  <!-- munn -->
+  <path d="M188 226 Q 200 237 212 226" stroke="#173037" stroke-width="5" fill="none" stroke-linecap="round"/>
+
+  <!-- skallbunn med takkete kant -->
+  <path d="M104 254 L 128 232 L 152 256 L 176 230 L 200 256 L 224 230 L 248 256 L 272 232 L 296 254 C 296 318 258 346 200 346 C 142 346 104 318 104 254 Z" fill="url(#shell1)"/>
+
+  <!-- prikker og høylys på skallet -->
+  <ellipse cx="158" cy="298" rx="12" ry="10" fill="#9AD9E2" opacity="0.7"/>
+  <ellipse cx="244" cy="302" rx="9" ry="8" fill="#FFC49E" opacity="0.75"/>
+  <ellipse cx="144" cy="280" rx="13" ry="22" fill="#FFFFFF" opacity="0.5" transform="rotate(-14 144 280)"/>
+
+  <!-- liten skallbit som lue -->
+  <path d="M238 96 L 252 72 L 268 94 L 284 76 L 292 102 C 274 116 252 114 238 96 Z" fill="url(#shell1)" transform="rotate(10 264 94)"/>
+
+  <!-- glitter -->
+  <path d="M320 150 l 3.5 9 9 3.5 -9 3.5 -3.5 9 -3.5 -9 -9 -3.5 9 -3.5 Z" fill="#FFD98A"/>
+</svg>

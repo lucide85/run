@@ -15,7 +15,13 @@ export interface AppConfig {
     maxHr: number;
     restHr: number;
   };
-  server: { port: number; sessionSecret: string; encryptionKey: string };
+  server: {
+    port: number;
+    sessionSecret: string;
+    encryptionKey: string;
+    /** IP-er (f.eks. Traefik-VM-en) som skal stoles på for X-Forwarded-For. Valgfri. */
+    trustedProxies?: string[];
+  };
   google: {
     enabled: boolean;
     clientId: string;

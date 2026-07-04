@@ -1,0 +1,72 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title3">
+  <title id="title3">Løperen – steg 3</title>
+  <defs>
+    <radialGradient id="body3" cx="0.35" cy="0.25" r="0.95">
+      <stop offset="0%" stop-color="#AEEAF2"/>
+      <stop offset="50%" stop-color="#4FBCCD"/>
+      <stop offset="100%" stop-color="#00768A"/>
+    </radialGradient>
+    <radialGradient id="rim3" cx="0.5" cy="0.4" r="0.62">
+      <stop offset="72%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#004B57" stop-opacity="0.30"/>
+    </radialGradient>
+    <linearGradient id="band3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFB07E"/>
+      <stop offset="100%" stop-color="#F0824A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- bakkeskygge -->
+  <ellipse cx="200" cy="362" rx="92" ry="15" fill="#0A3A42" opacity="0.14"/>
+
+  <!-- bakre arm (svinger bakover) -->
+  <path d="M278 202 Q 306 216 312 244" stroke="#0F8CA0" stroke-width="24" fill="none" stroke-linecap="round"/>
+
+  <!-- bakre bein, bøyd bakover -->
+  <path d="M164 282 Q 148 306 128 316" stroke="#00687A" stroke-width="26" fill="none" stroke-linecap="round"/>
+  <g transform="rotate(-24 112 322)">
+    <rect x="76" y="310" width="60" height="22" rx="11" fill="#FFF6E8"/>
+    <rect x="76" y="326" width="60" height="8" rx="4" fill="#E2BE8C"/>
+    <path d="M88 320 Q 100 328 114 324" stroke="#FF9F68" stroke-width="5" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- fremre bein, rett ned -->
+  <rect x="200" y="276" width="27" height="62" rx="13.5" fill="#00687A"/>
+  <rect x="186" y="330" width="62" height="22" rx="11" fill="#FFF6E8"/>
+  <rect x="186" y="346" width="62" height="8" rx="4" fill="#E2BE8C"/>
+  <path d="M198 340 Q 212 348 226 344" stroke="#FF9F68" stroke-width="5" fill="none" stroke-linecap="round"/>
+
+  <!-- kropp (høyere og slankere) -->
+  <path d="M200 56 C 258 56 290 118 290 198 C 290 262 254 298 200 298 C 146 298 110 262 110 198 C 110 118 142 56 200 56 Z" fill="url(#body3)"/>
+  <path d="M200 56 C 258 56 290 118 290 198 C 290 262 254 298 200 298 C 146 298 110 262 110 198 C 110 118 142 56 200 56 Z" fill="url(#rim3)"/>
+
+  <!-- fremre arm (pumper opp) -->
+  <path d="M122 212 Q 96 204 88 178" stroke="#1E9DB2" stroke-width="24" fill="none" stroke-linecap="round"/>
+
+  <!-- pannebånd -->
+  <path d="M116 130 C 148 100 252 100 284 130 L 278 156 C 250 130 150 130 122 156 Z" fill="url(#band3)"/>
+  <circle cx="200" cy="120" r="6.5" fill="#FFF6E8" opacity="0.95"/>
+
+  <!-- høylys -->
+  <ellipse cx="158" cy="88" rx="24" ry="14" fill="#FFFFFF" opacity="0.55" transform="rotate(-16 158 88)"/>
+  <circle cx="136" cy="186" r="8" fill="#FFFFFF" opacity="0.3"/>
+
+  <!-- øyne, litt bestemte -->
+  <ellipse cx="168" cy="184" rx="16" ry="19" fill="#22333B"/>
+  <circle cx="162" cy="176" r="6" fill="#FFFFFF"/>
+  <circle cx="174" cy="191" r="2.5" fill="#FFFFFF" opacity="0.9"/>
+  <ellipse cx="232" cy="184" rx="16" ry="19" fill="#22333B"/>
+  <circle cx="226" cy="176" r="6" fill="#FFFFFF"/>
+  <circle cx="238" cy="191" r="2.5" fill="#FFFFFF" opacity="0.9"/>
+
+  <!-- kinn -->
+  <ellipse cx="140" cy="212" rx="12" ry="7" fill="#FF9F68" opacity="0.4"/>
+  <ellipse cx="260" cy="212" rx="12" ry="7" fill="#FF9F68" opacity="0.4"/>
+
+  <!-- selvsikkert smil -->
+  <path d="M182 218 Q 200 232 218 218" stroke="#173037" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+
+  <!-- fartsstøv bak -->
+  <circle cx="330" cy="330" r="6" fill="#9AD9E2" opacity="0.7"/>
+  <circle cx="348" cy="316" r="4" fill="#9AD9E2" opacity="0.5"/>
+</svg>

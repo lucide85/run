@@ -1,6 +1,7 @@
 import { prisma } from "../db.js";
 import { loadConfig } from "../config.js";
 import { PROGRAM, deriveTargets } from "../data/program.js";
+import { osloNoon } from "../lib/dates.js";
 
 const WEEKDAY_OFFSET: Record<string, number> = {
   Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6,
@@ -105,9 +106,7 @@ export async function reconcileLinkedSessions(): Promise<number> {
   });
   for (const s of stale) {
     const when = s.workout?.startTime;
-    const date = when
-      ? new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), 12))
-      : s.date;
+    const date = when ? osloNoon(when) : s.date;
     await prisma.plannedSession.update({ where: { id: s.id }, data: { status: "completed", date } });
   }
   return stale.length;
@@ -118,13 +117,17 @@ export async function regenerateDates(userId: number, days: string[]): Promise<v
   const sessions = await prisma.plannedSession.findMany({ where: { userId } });
   if (sessions.length === 0) return;
 
-  // Forankre på mandagen i uken til den tidligste økten (uavhengig av config)
-  const earliest = sessions.reduce((min, s) => (s.date < min ? s.date : min), sessions[0].date);
-  const anchor = new Date(earliest);
+  // Forankre på økter som fortsatt står på sin planlagte dag. Fullførte økter
+  // får datoen flyttet til faktisk gjennomføring (opptil 2 dager unna) av synken,
+  // og kan derfor peke på feil uke – da ville hele planen forskyves.
+  const planned = sessions.filter((s) => s.status === "planned" && s.type !== "race");
+  const moved = sessions.filter((s) => s.status === "moved" && s.type !== "race");
+  const pool = planned.length ? planned : moved.length ? moved : sessions;
+  const base = pool.reduce((min, s) => (s.date < min.date ? s : min));
+  const anchor = new Date(base.date);
   const day = anchor.getUTCDay();
   anchor.setUTCDate(anchor.getUTCDate() + (day === 0 ? -6 : 1 - day));
-  const minWeek = Math.min(...sessions.map((s) => s.week));
-  const startMonday = addDays(anchor, -(minWeek - 1) * 7);
+  const startMonday = addDays(anchor, -(base.week - 1) * 7);
 
   const dayOffsets = sortedDayOffsets(days);
   for (const s of sessions) {

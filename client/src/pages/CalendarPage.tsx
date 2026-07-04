@@ -5,17 +5,24 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { EventDropArg, EventClickArg } from "@fullcalendar/core";
 import { api, PlannedSession } from "../api/client";
-import { Card, PageTitle, Spinner, TypeBadge } from "../components/ui";
+import { Button, Card, PageTitle, Spinner, TypeBadge } from "../components/ui";
 import { SESSION_COLORS, SESSION_LABELS } from "../lib/format";
 
 export default function CalendarPage() {
   const [sessions, setSessions] = useState<PlannedSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   async function load() {
-    setSessions(await api.sessions());
-    setLoading(false);
+    setError(null);
+    try {
+      setSessions(await api.sessions());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     load();
@@ -23,10 +30,16 @@ export default function CalendarPage() {
 
   async function onDrop(info: EventDropArg) {
     const id = Number(info.event.id);
-    const newDate = info.event.start;
-    if (!newDate) return;
+    // startStr er ren «YYYY-MM-DD» for heldagshendelser – unngår at lokal
+    // midnatt blir forrige dag i UTC (toISOString-fella).
+    const day = info.event.startStr;
+    if (!day) {
+      info.revert();
+      return;
+    }
     try {
-      await api.updateSession(id, { date: newDate.toISOString() });
+      // Appen lagrer datoer som UTC klokken 12 for å være tidssone-trygg
+      await api.updateSession(id, { date: `${day.slice(0, 10)}T12:00:00.000Z` });
       await load();
     } catch (e) {
       info.revert();
@@ -39,6 +52,22 @@ export default function CalendarPage() {
   }
 
   if (loading) return <Spinner />;
+  if (error)
+    return (
+      <Card>
+        <p style={{ marginTop: 0, fontSize: 14 }}>Kunne ikke laste innhold.</p>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setLoading(true);
+            load();
+          }}
+        >
+          <i className="fa-solid fa-arrows-rotate" />
+          Prøv igjen
+        </Button>
+      </Card>
+    );
 
   const events = sessions.map((s) => {
     const done = s.status === "completed";

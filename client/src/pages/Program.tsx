@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, PlannedSession, PlanProposal, RegenProposal, Settings } from "../api/client";
-import { PageTitle, Button, Spinner, TypeBadge, StatusBadge } from "../components/ui";
+import { PageTitle, Button, Card, Spinner, TypeBadge, StatusBadge } from "../components/ui";
 import { Markdown } from "../components/Markdown";
 import { dateShort, dist, pace, SESSION_COLORS, SESSION_LABELS } from "../lib/format";
 
@@ -16,8 +16,10 @@ export default function Program() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<PlannedSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [proposal, setProposal] = useState<PlanProposal | null>(null);
   const [proposing, setProposing] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
 
   // Regenerering av program
@@ -32,10 +34,16 @@ export default function Program() {
   const [applyingRegen, setApplyingRegen] = useState(false);
 
   async function load() {
-    const [s, st] = await Promise.all([api.sessions(), api.settings().catch(() => null)]);
-    setSessions(s);
-    if (st) setSettings(st);
-    setLoading(false);
+    setError(null);
+    try {
+      const [s, st] = await Promise.all([api.sessions(), api.settings().catch(() => null)]);
+      setSessions(s);
+      if (st) setSettings(st);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     load();
@@ -54,10 +62,17 @@ export default function Program() {
   }
 
   async function apply() {
-    if (!proposal) return;
-    await api.applyPlan(proposal);
-    setProposal(null);
-    await load();
+    if (!proposal || applying) return;
+    setApplying(true);
+    try {
+      await api.applyPlan(proposal);
+      setProposal(null);
+      await load();
+    } catch (e) {
+      alert(`Kunne ikke bruke endringene: ${(e as Error).message}`);
+    } finally {
+      setApplying(false);
+    }
   }
 
   function openRegen() {
@@ -108,6 +123,22 @@ export default function Program() {
   }
 
   if (loading) return <Spinner />;
+  if (error)
+    return (
+      <Card>
+        <p style={{ marginTop: 0, fontSize: 14 }}>Kunne ikke laste innhold.</p>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setLoading(true);
+            load();
+          }}
+        >
+          <i className="fa-solid fa-arrows-rotate" />
+          Prøv igjen
+        </Button>
+      </Card>
+    );
 
   const byWeek = new Map<number, PlannedSession[]>();
   for (const s of sessions) {
@@ -160,9 +191,13 @@ export default function Program() {
               <i className="fa-solid fa-rotate" style={{ color: "var(--t-langtur)", marginRight: 8 }} />
               Regenerer programmet
             </h3>
-            <span className="link muted" style={{ fontSize: 13 }} onClick={() => setRegenOpen(false)}>
+            <button
+              className="link muted"
+              style={{ fontSize: 13, background: "none", border: "none", padding: 0, fontFamily: "inherit" }}
+              onClick={() => setRegenOpen(false)}
+            >
               Lukk
-            </span>
+            </button>
           </div>
           <div className="card-body">
             <p className="muted" style={{ marginTop: 0, fontSize: 13.5 }}>
@@ -217,14 +252,22 @@ export default function Program() {
                 </div>
                 <Markdown>{regen.summary}</Markdown>
 
-                <span
+                <button
                   className="link"
-                  style={{ fontSize: 13, display: "inline-block", marginTop: 8 }}
+                  style={{
+                    fontSize: 13,
+                    display: "inline-block",
+                    marginTop: 8,
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    fontFamily: "inherit",
+                  }}
                   onClick={() => setRegenDetails((v) => !v)}
                 >
                   <i className={`fa-solid ${regenDetails ? "fa-chevron-up" : "fa-chevron-down"}`} style={{ marginRight: 6 }} />
                   {regenDetails ? "Skjul detaljer" : "Vis detaljer (uke for uke)"}
-                </span>
+                </button>
 
                 {regenDetails && (
                   <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -312,8 +355,13 @@ export default function Program() {
               </>
             )}
             <div className="flex gap8" style={{ marginTop: 16 }}>
-              {proposal.changes.length > 0 && <Button onClick={apply}>Godta endringer</Button>}
-              <Button variant="ghost" onClick={() => setProposal(null)}>
+              {proposal.changes.length > 0 && (
+                <Button onClick={apply} disabled={applying}>
+                  <i className={`fa-solid ${applying ? "fa-arrows-rotate fa-spin" : "fa-check"}`} />
+                  {applying ? "Bruker endringene…" : "Godta endringer"}
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => setProposal(null)} disabled={applying}>
                 Avvis
               </Button>
             </div>
