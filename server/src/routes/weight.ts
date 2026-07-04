@@ -1,13 +1,18 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
-import { currentUserId } from "../auth.js";
+import { currentUser, currentUserId } from "../auth.js";
 import { ah, parseDate } from "../lib/http.js";
+import { historyCutoff } from "../services/history.js";
 
 export const weightRouter = Router();
 
 weightRouter.get("/", ah(async (req, res) => {
-  const userId = currentUserId(req);
-  const logs = await prisma.weightLog.findMany({ where: { userId }, orderBy: { date: "asc" } });
+  const user = await currentUser(req);
+  const cutoff = await historyCutoff(user);
+  const logs = await prisma.weightLog.findMany({
+    where: { userId: user.id, ...(cutoff ? { date: { gte: cutoff } } : {}) },
+    orderBy: { date: "asc" },
+  });
   res.json(logs);
 }));
 

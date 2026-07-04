@@ -33,6 +33,10 @@ model User {
   homeLat               Float?
   homeLon               Float?
   homePlace             String?
+
+  // Vis kun historikk fra og med programmets første økt (skjuler eldre
+  // Garmin-import i grafer, rekorder og øktlister – ingenting slettes)
+  limitHistoryToPlan    Boolean   @default(false)
   raceName              String?
   raceDate              DateTime?
   trainingDaysJson      String? // JSON: ["Tue","Thu","Sun"]

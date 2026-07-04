@@ -28,15 +28,19 @@ settingsRouter.get("/", ah(async (req, res) => {
     googleEnabled: cfg.google.enabled,
     lastSync: user.lastGarminSync,
     home: { lat: user.homeLat, lon: user.homeLon, place: user.homePlace },
+    limitHistoryToPlan: user.limitHistoryToPlan,
   });
 }));
 
 // Oppdater treningsdager / pulsverdier
 settingsRouter.put("/", ah(async (req, res) => {
   const user = await currentUser(req);
-  const { days, maxHr, restHr, watchModel, homeLat, homeLon, homePlace } = req.body ?? {};
+  const { days, maxHr, restHr, watchModel, homeLat, homeLon, homePlace, limitHistoryToPlan } =
+    req.body ?? {};
   const data: Record<string, unknown> = {};
   let regenerate = false;
+
+  if (typeof limitHistoryToPlan === "boolean") data.limitHistoryToPlan = limitHistoryToPlan;
 
   if (Array.isArray(days) && days.length >= 1) {
     data.trainingDaysJson = JSON.stringify(days);

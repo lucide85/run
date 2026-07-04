@@ -3,6 +3,7 @@ import { prisma } from "../db.js";
 import { computeZones } from "../data/program.js";
 import { zoneSecondsFromStreams } from "./intervals.js";
 import { bestSegmentSec } from "./records.js";
+import { workoutTimeFilter } from "./history.js";
 
 /**
  * Formkurven: treningsbelastning per dag (sone-vektet TRIMP), glattet til
@@ -48,7 +49,7 @@ function riegel10k(bestSec: number, fromKm: number): number {
 export async function computeFitness(user: User): Promise<FitnessResult> {
   const zones = computeZones(user.maxHr, user.restHr);
   const workouts = await prisma.workout.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, startTime: await workoutTimeFilter(user) },
     orderBy: { startTime: "asc" },
     select: {
       id: true,

@@ -1,5 +1,6 @@
-import type { Workout } from "@prisma/client";
+import type { User, Workout } from "@prisma/client";
 import { prisma } from "../db.js";
+import { workoutTimeFilter } from "./history.js";
 
 /**
  * Rekordveggen: personlige rekorder utledet av allerede lagrede økter.
@@ -90,9 +91,9 @@ const SEGMENTS: { key: string; label: string; distKm: number }[] = [
   { key: "fastest10k", label: "Raskeste 10 km", distKm: 10 },
 ];
 
-export async function computeRecords(userId: number): Promise<RecordEntry[]> {
+export async function computeRecords(user: User): Promise<RecordEntry[]> {
   const workouts = await prisma.workout.findMany({
-    where: { userId },
+    where: { userId: user.id, startTime: await workoutTimeFilter(user) },
     orderBy: { startTime: "asc" },
     select: {
       id: true,
