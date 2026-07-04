@@ -23,6 +23,7 @@ import { onboardingRouter } from "./routes/onboarding.js";
 import { recordsRouter } from "./routes/records.js";
 import { fitnessRouter } from "./routes/fitness.js";
 import { weatherRouter } from "./routes/weather.js";
+import { geoRouter } from "./routes/geo.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cfg = loadConfig();
@@ -107,6 +108,7 @@ app.use("/api/onboarding", ah(requireAuth), onboardingRouter);
 app.use("/api/records", ah(requireAuth), recordsRouter);
 app.use("/api/fitness", ah(requireAuth), fitnessRouter);
 app.use("/api/weather", ah(requireAuth), weatherRouter);
+app.use("/api/geo", ah(requireAuth), geoRouter);
 app.use("/api/admin", ah(requireAuth), requireAdmin, adminRouter);
 
 // --- Statisk frontend i produksjon ---
