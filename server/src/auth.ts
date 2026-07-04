@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import type { User } from "@prisma/client";
-import { getUserByEmail, getUserById, getAdmin, verifyPassword } from "./services/users.js";
+import { getUserByEmail, getUserById, getAdmin, verifyPassword, verifyDummyPassword } from "./services/users.js";
 
 declare module "express-session" {
   interface SessionData {
@@ -51,6 +51,11 @@ export function currentUserId(req: Request): number {
 
 export async function login(req: Request, res: Response) {
   const { username, password, email } = req.body ?? {};
+  // Manglende/feil-typet passord skal gi 401 – ikke la bcrypt kaste
+  // («Illegal arguments») og ta ned prosessen.
+  if (typeof password !== "string" || password.length === 0) {
+    return res.status(401).json({ error: "Feil brukernavn eller passord" });
+  }
   const loginId = (email ?? username ?? "").toString();
   const user = await getUserByEmail(loginId);
   if (user && verifyPassword(user, password)) {
@@ -58,6 +63,9 @@ export async function login(req: Request, res: Response) {
     req.session.role = user.role;
     return res.json({ ok: true });
   }
+  // Ukjent e-post: kjør likevel en hash-sammenligning så svartiden ikke
+  // avslører hvilke e-poster som finnes.
+  if (!user) verifyDummyPassword(password);
   return res.status(401).json({ error: "Feil brukernavn eller passord" });
 }
 

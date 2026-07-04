@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, Workout } from "../api/client";
-import { PageTitle, Spinner } from "../components/ui";
+import { Button, Card, PageTitle, Spinner } from "../components/ui";
 import { SyncButton } from "../components/SyncButton";
 import { dateNo, dist, duration, pace } from "../lib/format";
 
@@ -9,16 +9,39 @@ export default function Workouts() {
   const navigate = useNavigate();
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    setWorkouts(await api.workouts());
-    setLoading(false);
+    setError(null);
+    try {
+      setWorkouts(await api.workouts());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     load();
   }, []);
 
   if (loading) return <Spinner />;
+  if (error)
+    return (
+      <Card>
+        <p style={{ marginTop: 0, fontSize: 14 }}>Kunne ikke laste innhold.</p>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setLoading(true);
+            load();
+          }}
+        >
+          <i className="fa-solid fa-arrows-rotate" />
+          Prøv igjen
+        </Button>
+      </Card>
+    );
 
   return (
     <div>
@@ -47,7 +70,14 @@ export default function Workouts() {
               </thead>
               <tbody>
                 {workouts.map((w) => (
-                  <tr key={w.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/okter/${w.id}`)}>
+                  <tr
+                    key={w.id}
+                    style={{ cursor: "pointer" }}
+                    tabIndex={0}
+                    role="link"
+                    onClick={() => navigate(`/okter/${w.id}`)}
+                    onKeyDown={(e) => e.key === "Enter" && navigate(`/okter/${w.id}`)}
+                  >
                     <td style={{ whiteSpace: "nowrap", color: "var(--fg-secondary)", fontWeight: 600 }}>{dateNo(w.startTime)}</td>
                     <td>
                       <a>{w.name || w.sport || "Løp"}</a>
@@ -70,7 +100,15 @@ export default function Workouts() {
           {/* Mobil-kort */}
           <div className="show-m" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {workouts.map((w) => (
-              <div key={w.id} className="card" style={{ padding: "14px 16px", cursor: "pointer" }} onClick={() => navigate(`/okter/${w.id}`)}>
+              <div
+                key={w.id}
+                className="card"
+                style={{ padding: "14px 16px", cursor: "pointer" }}
+                tabIndex={0}
+                role="link"
+                onClick={() => navigate(`/okter/${w.id}`)}
+                onKeyDown={(e) => e.key === "Enter" && navigate(`/okter/${w.id}`)}
+              >
                 <div className="flex between items-center">
                   <div>
                     <a style={{ fontSize: 15, fontWeight: 700 }}>{w.name || w.sport || "Løp"}</a>

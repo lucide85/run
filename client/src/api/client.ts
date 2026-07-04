@@ -41,9 +41,26 @@ export interface Workout {
 
 export interface WorkoutDetail extends Workout {
   streams: { t: number; hr?: number; paceSecPerKm?: number; altitude?: number; distanceKm?: number; cadence?: number }[];
-  laps: { index: number; distanceKm?: number; durationSec?: number; avgHr?: number; avgPaceSecPerKm?: number }[];
+  laps: {
+    index: number;
+    distanceKm?: number;
+    durationSec?: number;
+    avgHr?: number;
+    avgPaceSecPerKm?: number;
+    /** "warmup" | "work" | "recovery" | "cooldown" | "unknown" – mangler i eldre svar */
+    role?: string;
+  }[];
   hrZoneSeconds: Record<string, number>;
   aiMessages: AiMessage[];
+  /** Oppsummering av dragene når økten ser ut som intervaller (mangler i eldre svar) */
+  workSummary?: {
+    count: number;
+    totalWorkSec: number;
+    avgWorkDurationSec: number | null;
+    avgWorkHr: number | null;
+    avgWorkPaceSecPerKm: number | null;
+    avgRecoverySec: number | null;
+  } | null;
 }
 
 export interface AiMessage {
@@ -165,7 +182,11 @@ async function req<T>(url: string, options?: RequestInit): Promise<T> {
     credentials: "include",
     ...options,
   });
-  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  if (res.status === 401) {
+    // Gi appen beskjed om at innloggingen er utløpt (App.tsx lytter på denne)
+    window.dispatchEvent(new Event("auth:expired"));
+    throw new Error("UNAUTHORIZED");
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Feil: ${res.status}`);

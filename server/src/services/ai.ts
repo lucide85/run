@@ -2,6 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { PlannedSession, Workout, User } from "@prisma/client";
 import { loadConfig } from "../config.js";
 import { computeZones } from "../data/program.js";
+import type { ZoneDef } from "./fit.js";
+import {
+  classifyLaps,
+  parseLapsJson,
+  workSummary,
+  zoneSecondsFromStreams,
+} from "./intervals.js";
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -34,8 +41,28 @@ ${zoneLines}
 Viktige prinsipper: rolige økter SKAL være rolige (sone 2) – den vanligste feilen er å løpe lette dager for hardt. Pulsdrift utover langturer og i varme er normalt. Styr etter puls, ikke klokke, når det er varmt eller tungt. Bygg formen gradvis og kom skadefri til start. Svar på norsk, konkret og oppmuntrende.`;
 }
 
-/** Komprimer en økt til tekst egnet for modellen (nedsamplet strøm). */
-export function summarizeWorkout(w: Workout): string {
+const ROLE_TAG: Record<string, string> = {
+  work: " [drag]",
+  recovery: " [pause]",
+  warmup: " [oppvarming]",
+  cooldown: " [nedjogg]",
+  unknown: "",
+};
+
+function fmtDur(sec?: number | null): string {
+  if (!sec && sec !== 0) return "?";
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m}:${String(s).padStart(2, "0")} min` : `${s} sek`;
+}
+
+/**
+ * Komprimer en økt til tekst egnet for modellen (nedsamplet strøm).
+ * Gis brukerens soner beregnes tid-i-sone på nytt fra strømmen (riktig for
+ * alle brukere, også på eldre importer). Runder merkes drag/pause der det
+ * kan avgjøres – slik at intervalløkter vurderes på dragene, ikke snittpuls.
+ */
+export function summarizeWorkout(w: Workout, zones?: ZoneDef[]): string {
   const fmtPace = (s?: number | null) =>
     s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} min/km` : "ukjent";
   const lines: string[] = [];
@@ -49,27 +76,65 @@ export function summarizeWorkout(w: Workout): string {
   if (w.avgCadence) lines.push(`Snittkadens: ${w.avgCadence} steg/min`);
   if (w.calories) lines.push(`Kalorier: ${w.calories}`);
 
-  if (w.hrZoneSecondsJson) {
-    const z = JSON.parse(w.hrZoneSecondsJson) as Record<string, number>;
-    const total = Object.values(z).reduce((a, b) => a + b, 0) || 1;
-    const dist = Object.entries(z)
-      .map(([zone, sec]) => `S${zone}: ${Math.round((sec / total) * 100)}%`)
+  // Tid i soner: helst beregnet fra strømmen med brukerens soner, ellers lagret fordeling.
+  let zoneSeconds: Record<string, number> | null = null;
+  if (zones) zoneSeconds = zoneSecondsFromStreams(w.streamsJson, zones);
+  if (!zoneSeconds && w.hrZoneSecondsJson) {
+    try {
+      zoneSeconds = JSON.parse(w.hrZoneSecondsJson) as Record<string, number>;
+    } catch {
+      zoneSeconds = null;
+    }
+  }
+  if (zoneSeconds) {
+    const total = Object.values(zoneSeconds).reduce((a, b) => a + b, 0) || 1;
+    const dist = Object.entries(zoneSeconds)
+      .map(
+        ([zone, sec]) =>
+          `S${zone}: ${Math.round(sec / 60)} min (${Math.round((sec / total) * 100)}%)`
+      )
       .join(", ");
     lines.push(`Pulssone-fordeling: ${dist}`);
   }
 
-  if (w.lapsJson) {
-    const laps = JSON.parse(w.lapsJson) as any[];
-    if (laps.length > 1 && laps.length <= 30) {
-      lines.push("Runder:");
-      for (const l of laps) {
-        lines.push(
-          `  ${l.index}: ${l.distanceKm?.toFixed(2) ?? "?"} km @ ${fmtPace(l.avgPaceSecPerKm)}, puls ${l.avgHr ?? "?"}`
-        );
-      }
+  const classified = classifyLaps(parseLapsJson(w.lapsJson));
+  const ws = workSummary(classified);
+  if (ws) {
+    lines.push(
+      `Drag (arbeidsintervaller): ${ws.count} × ${fmtDur(ws.avgWorkDurationSec)}` +
+        `${ws.avgWorkDistanceKm ? ` (~${ws.avgWorkDistanceKm} km)` : ""}` +
+        ` @ ${fmtPace(ws.avgWorkPaceSecPerKm)}, snittpuls i dragene ${ws.avgWorkHr ?? "?"}` +
+        `${ws.avgRecoverySec ? `, pauser ~${fmtDur(ws.avgRecoverySec)}` : ""}`
+    );
+  }
+
+  // Rundeliste: ved svært mange runder (autolap + intervaller) vises kun dragene.
+  let listLaps = classified;
+  if (classified.length > 30) {
+    listLaps = ws ? classified.filter((l) => l.role === "work").slice(0, 30) : [];
+  }
+  if (listLaps.length > 1) {
+    lines.push(classified.length > 30 ? "Runder (kun drag):" : "Runder:");
+    for (const l of listLaps) {
+      lines.push(
+        `  ${l.index}: ${l.distanceKm?.toFixed(2) ?? "?"} km @ ${fmtPace(l.avgPaceSecPerKm)}, puls ${l.avgHr ?? "?"}${ROLE_TAG[l.role] ?? ""}`
+      );
     }
   }
   return lines.join("\n");
+}
+
+/** Instruks som hindrer at intervalløkter dømmes på snittpuls for hele økten. */
+export function intervalGuidance(planned: PlannedSession | null, w: Workout): string {
+  const looksLikeIntervals =
+    workSummary(classifyLaps(parseLapsJson(w.lapsJson))) != null;
+  if (planned?.type !== "quality" && !looksLikeIntervals) return "";
+  return `
+VIKTIG – DETTE ER EN INTERVALL-/KVALITETSØKT:
+Snittpulsen for HELE økten inkluderer oppvarming, pauser mellom dragene og nedjogg, og SKAL derfor ligge godt under målsonen. Det er riktig gjennomføring – ikke underprestasjon. Vurder økten på:
+(a) dragene – linjen «Drag (arbeidsintervaller)» og rundene merket [drag]: puls og tempo per drag mot målsone/måltempo,
+(b) tid i målsonen fra pulssone-fordelingen (f.eks. 4×3 min terskel ≈ 12 min i målsonen).
+Bruk ALDRI snittpulsen for hele økten til å avgjøre om målsonen ble truffet. Rolige pauser er en del av økten og skal roses, ikke trekkes for.`;
 }
 
 function plannedContext(p: PlannedSession | null): string {
@@ -93,15 +158,16 @@ export async function evaluateWorkout(
   history: string
 ): Promise<string> {
   const place = workout.name?.trim();
+  const zones = computeZones(user.maxHr, user.restHr);
 
   const userText = `Her er en gjennomført treningsøkt jeg lastet opp fra Garmin.
 
 ${plannedContext(planned)}
 
 GJENNOMFØRT ØKT:
-${summarizeWorkout(workout)}
+${summarizeWorkout(workout, zones)}
 ${place ? `Sted/navn på økten: ${place}` : ""}
-
+${intervalGuidance(planned, workout)}
 ${history ? `SISTE ØKTER (kontekst):\n${history}\n` : ""}
 SVARET DITT (markdown, norsk):
 1) START med en kort, lett humoristisk innledning (1–3 setninger) – gjerne en liten vits eller et passende, motiverende sitat. VARIÉR stilen fra gang til gang så det er gøy å lese: noen ganger en vits, noen ganger et sitat, noen ganger en treffende observasjon fra økten (f.eks. tempo, puls, høydemeter, varighet)${place ? ` eller stedet («${place}»)` : ""}. Du trenger IKKE bruke sted eller øktdata hver gang – bare når det faller naturlig. Ikke vær teit eller kunstig; hold det varmt og ekte.
@@ -127,7 +193,8 @@ export async function chatAboutWorkout(
 
 ${plannedContext(planned)}
 
-${summarizeWorkout(workout)}`;
+${summarizeWorkout(workout, computeZones(user.maxHr, user.restHr))}
+${intervalGuidance(planned, workout)}`;
 
   const messages = [
     { role: "user" as const, content: intro },
@@ -336,6 +403,7 @@ export async function proposePlanAdjustment(
 
 GJØR SLIK:
 1) Sammenlign det jeg FAKTISK har gjort med det som var PLANLAGT/forventet i perioden – tempo, puls/sone, distanse, og om økter er hoppet over.
+   MERK om intervall-/kvalitetsøkter: snittpulsen for hele økten SKAL ligge under målsonen (pausene trekker den ned). Bruk «drag: …»- og «min i sone …»-informasjonen der den finnes – ikke snittpulsen – når du vurderer om kvalitetsøkter traff målet.
 2) Skriv en kort, ærlig vurdering i "evaluation": ligger formen min foran, på sporet eller bak det forventede – og hvorfor? Gi så en generell begrunnelse for om planen bør endres, og i så fall hvordan (overordnet).
 3) Foreslå konkrete endringer KUN der det gir tydelig mening (juster tempo/distanse hvis jeg ligger foran/bak, flytt eller endre en økt hvis jeg har hoppet over flere). Vær konservativ og skadeforebyggende. Hvis alt ser bra ut, returner en tom changes-liste – men gi ALLTID en evaluation.
 4) For hver endring: sett "change" til en kort, konkret beskrivelse av hva som endres, og "reason" til hvorfor.

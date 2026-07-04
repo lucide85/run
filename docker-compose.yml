@@ -6,6 +6,8 @@ services:
     image: treningsapp:latest
     container_name: treningsapp
     restart: unless-stopped
+    # init-prosess videresender SIGTERM riktig ved `docker stop`
+    init: true
     ports:
       # Eksponer porten på app-VM-en slik at Traefik-VM-en når den.
       # Vil du kun slippe inn Traefik, bind til LAN-IP-en: "192.168.x.y:3001:3001"
@@ -18,7 +20,9 @@ services:
     environment:
       - NODE_ENV=production
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # /api/health rører ikke sesjoner (i motsetning til /api/auth/status,
+      # som opprettet en ny admin-sesjon per sjekk)
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 5

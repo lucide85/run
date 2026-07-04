@@ -25,7 +25,8 @@
   "server": {
     "port": 3001,
     "sessionSecret": "bytt-meg-til-en-lang-tilfeldig-streng",
-    "encryptionKey": "bytt-meg-til-en-annen-lang-tilfeldig-streng"
+    "encryptionKey": "bytt-meg-til-en-annen-lang-tilfeldig-streng",
+    "trustedProxies": []
   },
   "google": {
     "enabled": false,

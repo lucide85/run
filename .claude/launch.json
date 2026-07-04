@@ -5,7 +5,7 @@
       "name": "treningsapp",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
       "runtimeArgs": [
-        "C:\\Users\\viave\\OneDrive - Vitec Software Group AB (publ)\\Claude\\10k treningsprogram\\server\\dist\\index.js"
+        "C:\\Users\\viave\\OneDrive - Vitec Software Group AB (publ)\\Claude\\Run app\\run\\server\\dist\\index.js"
       ],
       "port": 3001
     }

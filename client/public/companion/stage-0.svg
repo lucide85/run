@@ -1,0 +1,44 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title0">
+  <title id="title0">Egget – steg 0</title>
+  <defs>
+    <radialGradient id="body0" cx="0.35" cy="0.25" r="0.95">
+      <stop offset="0%" stop-color="#FFFEF8"/>
+      <stop offset="45%" stop-color="#FBEED4"/>
+      <stop offset="100%" stop-color="#E7C494"/>
+    </radialGradient>
+    <radialGradient id="glow0" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="70%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#C89B5E" stop-opacity="0.28"/>
+    </radialGradient>
+  </defs>
+
+  <!-- bakkeskygge -->
+  <ellipse cx="200" cy="352" rx="94" ry="17" fill="#0A3A42" opacity="0.14"/>
+
+  <!-- eggekropp -->
+  <path d="M200 58 C 262 58 304 146 304 224 C 304 298 258 346 200 346 C 142 346 96 298 96 224 C 96 146 138 58 200 58 Z" fill="url(#body0)"/>
+  <path d="M200 58 C 262 58 304 146 304 224 C 304 298 258 346 200 346 C 142 346 96 298 96 224 C 96 146 138 58 200 58 Z" fill="url(#glow0)"/>
+
+  <!-- pastellprikker -->
+  <ellipse cx="150" cy="240" rx="17" ry="14" fill="#9AD9E2" opacity="0.75"/>
+  <ellipse cx="254" cy="200" rx="13" ry="11" fill="#FFC49E" opacity="0.8"/>
+  <ellipse cx="218" cy="294" rx="15" ry="12" fill="#9AD9E2" opacity="0.55"/>
+  <ellipse cx="134" cy="178" rx="9" ry="8" fill="#FFC49E" opacity="0.6"/>
+  <ellipse cx="252" cy="282" rx="8" ry="7" fill="#9AD9E2" opacity="0.45"/>
+
+  <!-- liten sprekk med et gløtt av turkis -->
+  <path d="M182 92 L 194 106 L 180 116 L 194 130" fill="none" stroke="#B98F53" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="187" cy="111" r="3.6" fill="#35B3C6"/>
+
+  <!-- speilende høylys -->
+  <ellipse cx="156" cy="128" rx="24" ry="44" fill="#FFFFFF" opacity="0.6" transform="rotate(-16 156 128)"/>
+  <circle cx="176" cy="184" r="7" fill="#FFFFFF" opacity="0.35"/>
+
+  <!-- rugge-streker -->
+  <path d="M92 296 Q 76 288 72 272" stroke="#9AD9E2" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <path d="M308 296 Q 324 288 328 272" stroke="#9AD9E2" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- glitter -->
+  <path d="M318 96 l 4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4 Z" fill="#FFD98A"/>
+  <path d="M74 132 l 3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 Z" fill="#9AD9E2" opacity="0.9"/>
+</svg>

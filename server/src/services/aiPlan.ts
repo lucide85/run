@@ -3,6 +3,7 @@ import type { User } from "@prisma/client";
 import { prisma } from "../db.js";
 import { loadConfig } from "../config.js";
 import { computeZones } from "../data/program.js";
+import { qualitySuffix } from "./history.js";
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -185,6 +186,33 @@ ${force ? "Du har nok informasjon — lag planen nå." : "Hvis noe avgjørende m
   return { created: 0, summary: "Klarte ikke å lage en plan." };
 }
 
+const SESSION_TYPES = new Set(["easy", "quality", "long", "race"]);
+
+/**
+ * Valider en plan (fra AI eller klient) FØR noe slettes/lagres. Kaster
+ * ValidationError – slik at en ødelagt payload aldri kan koste brukeren planen.
+ */
+function validatePlanWeeks(weeks: unknown): asserts weeks is PlanWeek[] {
+  const fail = (msg: string): never => {
+    const e = new Error(msg);
+    e.name = "ValidationError";
+    throw e;
+  };
+  if (!Array.isArray(weeks) || weeks.length === 0) fail("Planen mangler uker.");
+  for (const w of weeks as PlanWeek[]) {
+    if (!w || typeof w.week !== "number" || !Number.isFinite(w.week)) fail("En uke mangler ukenummer.");
+    if (typeof w.phase !== "number") fail(`Uke ${w.week}: mangler fase.`);
+    if (typeof w.phaseName !== "string" || !w.phaseName) fail(`Uke ${w.week}: mangler fasenavn.`);
+    if (!Array.isArray(w.sessions) || w.sessions.length === 0) fail(`Uke ${w.week}: mangler økter.`);
+    for (const s of w.sessions) {
+      if (!s || typeof s.slot !== "number") fail(`Uke ${w.week}: en økt mangler slot.`);
+      if (!SESSION_TYPES.has(s.type)) fail(`Uke ${w.week}: ukjent økttype "${(s as { type?: unknown }).type}".`);
+      if (typeof s.title !== "string" || !s.title) fail(`Uke ${w.week}: en økt mangler tittel.`);
+      if (typeof s.description !== "string" || !s.description) fail(`Uke ${w.week}: en økt mangler beskrivelse.`);
+    }
+  }
+}
+
 async function persistPlan(
   user: User,
   weeks: PlanWeek[],
@@ -192,41 +220,63 @@ async function persistPlan(
   maxHr: number,
   restHr: number
 ): Promise<number> {
+  // Valider FØR sletting – og gjør delete+create i én transaksjon, slik at en
+  // feil midt i aldri etterlater brukeren uten plan.
+  validatePlanWeeks(weeks);
+
   const days = DAYS_BY_COUNT[answers.daysPerWeek] ?? DAYS_BY_COUNT[3];
   const dayOffsets = days.map((d) => WEEKDAY_OFFSET[d]).sort((a, b) => a - b);
   const startMonday = mondayOfWeek(new Date());
   const raceDate = utcNoon(new Date(answers.raceDate));
-
-  // Fjern eksisterende plan for brukeren
-  await prisma.plannedSession.deleteMany({ where: { userId: user.id } });
-
-  let created = 0;
-  for (const w of weeks) {
-    for (const s of w.sessions) {
-      const offset = dayOffsets[(s.slot - 1) % dayOffsets.length] ?? (s.slot - 1) * 2;
-      let date = addDays(startMonday, (w.week - 1) * 7 + offset);
-      if (s.type === "race") date = raceDate;
-      await prisma.plannedSession.create({
-        data: {
-          userId: user.id,
-          week: w.week,
-          phase: w.phase,
-          phaseName: w.phaseName,
-          type: s.type,
-          slot: s.slot,
-          title: s.title,
-          description: s.description,
-          targetZone: s.targetZone ?? null,
-          targetPaceMinSec: s.paceMinSec ?? null,
-          targetPaceMaxSec: s.paceMaxSec ?? null,
-          plannedDistanceKm: s.distanceKm ?? null,
-          date,
-          status: "planned",
-        },
-      });
-      created++;
-    }
+  if (Number.isNaN(raceDate.getTime())) {
+    const e = new Error("Ugyldig løpsdato.");
+    e.name = "ValidationError";
+    throw e;
   }
+
+  const created = await prisma.$transaction(async (tx) => {
+    // Behold fullførte/koblede økter som historikk (som regenerate-flyten gjør) –
+    // en re-onboarding skal ALDRI slette gjennomført trening eller AI-meldingene dens.
+    await tx.plannedSession.deleteMany({
+      where: { userId: user.id, status: { not: "completed" }, workoutId: null },
+    });
+
+    // Ukenummerer nye uker etter beholdt historikk, så visningen ikke kolliderer.
+    const kept = await tx.plannedSession.findMany({
+      where: { userId: user.id },
+      select: { week: true },
+    });
+    const weekOffset = kept.length ? Math.max(...kept.map((k) => k.week)) : 0;
+
+    let count = 0;
+    for (const w of weeks) {
+      for (const s of w.sessions) {
+        const offset = dayOffsets[(s.slot - 1) % dayOffsets.length] ?? (s.slot - 1) * 2;
+        let date = addDays(startMonday, (w.week - 1) * 7 + offset);
+        if (s.type === "race") date = raceDate;
+        await tx.plannedSession.create({
+          data: {
+            userId: user.id,
+            week: w.week + weekOffset,
+            phase: w.phase,
+            phaseName: w.phaseName,
+            type: s.type,
+            slot: s.slot,
+            title: s.title,
+            description: s.description,
+            targetZone: s.targetZone ?? null,
+            targetPaceMinSec: s.paceMinSec ?? null,
+            targetPaceMaxSec: s.paceMaxSec ?? null,
+            plannedDistanceKm: s.distanceKm ?? null,
+            date,
+            status: "planned",
+          },
+        });
+        count++;
+      }
+    }
+    return count;
+  });
 
   await prisma.user.update({
     where: { id: user.id },
@@ -266,9 +316,10 @@ export interface RegenerateProposal {
 }
 
 /** Kompakt planlagt-vs-faktisk for siste fullførte økter – form-kontekst til AI. */
-async function formSummary(userId: number): Promise<string> {
+async function formSummary(user: User): Promise<string> {
+  const zones = computeZones(user.maxHr, user.restHr);
   const done = await prisma.plannedSession.findMany({
-    where: { userId, status: "completed" },
+    where: { userId: user.id, status: "completed" },
     orderBy: { date: "desc" },
     take: 10,
     include: { workout: true },
@@ -282,7 +333,7 @@ async function formSummary(userId: number): Promise<string> {
       const plan = `plan ${s.targetZone ?? "sone ?"}${s.plannedDistanceKm ? `, ${s.plannedDistanceKm} km` : ""}`;
       const w = s.workout;
       const act = w
-        ? `faktisk ${w.distanceKm?.toFixed(2) ?? "?"} km @ ${fmtPace(w.avgPaceSecPerKm)}/km, snittpuls ${w.avgHr ?? "?"}`
+        ? `faktisk ${w.distanceKm?.toFixed(2) ?? "?"} km @ ${fmtPace(w.avgPaceSecPerKm)}/km, snittpuls ${w.avgHr ?? "?"}${qualitySuffix(s, w, zones)}`
         : "(ingen øktdata)";
       return `Uke ${s.week} [${s.type}] ${s.title}: ${plan} → ${act}`;
     })
@@ -299,7 +350,7 @@ export async function regeneratePlanProposal(user: User, opts: RegenerateOptions
   const zoneLines = computeZones(user.maxHr, user.restHr)
     .map((z) => `Sone ${z.zone} (${z.name}): ${z.min}-${z.max} bpm`)
     .join("\n");
-  const history = await formSummary(user.id);
+  const history = await formSummary(user);
 
   const prompt = `Bygg om RESTEN av løpeplanen min, fra og med i dag (${today.toISOString().slice(0, 10)}) og fram til løpet. Allerede fullførte økter beholdes som historikk – du planlegger kun tiden som gjenstår.
 
@@ -316,6 +367,7 @@ ${zoneLines}
 ${opts.instructions?.trim() || "(ingen spesifikke ønsker – bruk skjønn ut fra formen min)"}
 
 FORM SÅ LANGT (planlagt vs. faktisk):
+(Merk: for intervall-/kvalitetsøkter er snittpulsen for hele økten forventet å ligge under målsonen – pausene trekker den ned. Bruk «drag: …»/«min i sone …» der det finnes.)
 ${history}
 
 Lag nøyaktig ${weeksUntil} uker (week 1..${weeksUntil}) med ${daysPerWeek} økter per uke (slot 1..${daysPerWeek}). Bruk fornuftig periodisering fram mot løpet (bygging → spissing → nedtrapping) og legg løpet (type "race", distanse ${opts.raceDistanceKm} km) som siste økt i siste uke. Hold de fleste øktene rolige (sone 2), vær konservativ og skadeforebyggende, og ta tydelig hensyn til formen min og ønskene over.
@@ -355,53 +407,65 @@ export async function applyRegeneratedPlan(
   weeks: PlanWeek[],
   opts: RegenerateOptions
 ): Promise<{ created: number; removed: number }> {
+  // Valider klient-payloaden FØR noe slettes, og kjør delete+create i én
+  // transaksjon – en ødelagt payload skal aldri kunne slette resten av planen.
+  validatePlanWeeks(weeks);
+
   const now = new Date();
   const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
   const startMonday = mondayOfWeek(now);
   const raceDate = utcNoon(new Date(opts.raceDate));
+  if (Number.isNaN(raceDate.getTime())) {
+    const e = new Error("Ugyldig løpsdato.");
+    e.name = "ValidationError";
+    throw e;
+  }
   const days = user.trainingDaysJson ? (JSON.parse(user.trainingDaysJson) as string[]) : DAYS_BY_COUNT[3];
   const dayOffsets = days
     .map((d) => WEEKDAY_OFFSET[d])
     .filter((n) => n !== undefined)
     .sort((a, b) => a - b);
 
-  // Behold fullførte; fjern fremtidige ikke-fullførte (fra og med i dag)
-  const del = await prisma.plannedSession.deleteMany({
-    where: { userId: user.id, status: { not: "completed" }, date: { gte: todayStart } },
-  });
+  const { created, removed } = await prisma.$transaction(async (tx) => {
+    // Behold fullførte; fjern fremtidige ikke-fullførte (fra og med i dag)
+    const del = await tx.plannedSession.deleteMany({
+      where: { userId: user.id, status: { not: "completed" }, date: { gte: todayStart } },
+    });
 
-  // Nye uker nummereres slik at de fortsetter etter beholdt historikk (unngår kollisjon i visning)
-  const kept = await prisma.plannedSession.findMany({ where: { userId: user.id }, select: { week: true } });
-  const weekOffset = kept.length ? Math.max(...kept.map((k) => k.week)) : 0;
+    // Nye uker nummereres slik at de fortsetter etter beholdt historikk (unngår kollisjon i visning)
+    const kept = await tx.plannedSession.findMany({ where: { userId: user.id }, select: { week: true } });
+    const weekOffset = kept.length ? Math.max(...kept.map((k) => k.week)) : 0;
 
-  let created = 0;
-  for (const w of weeks) {
-    for (const s of w.sessions) {
-      const offset = dayOffsets[(s.slot - 1) % dayOffsets.length] ?? (s.slot - 1) * 2;
-      let date = addDays(startMonday, (w.week - 1) * 7 + offset);
-      if (s.type === "race") date = raceDate;
-      if (s.type !== "race" && date < todayStart) continue; // ikke lag økter i fortiden
-      await prisma.plannedSession.create({
-        data: {
-          userId: user.id,
-          week: w.week + weekOffset,
-          phase: w.phase,
-          phaseName: w.phaseName,
-          type: s.type,
-          slot: s.slot,
-          title: s.title,
-          description: s.description,
-          targetZone: s.targetZone ?? null,
-          targetPaceMinSec: s.paceMinSec ?? null,
-          targetPaceMaxSec: s.paceMaxSec ?? null,
-          plannedDistanceKm: s.distanceKm ?? null,
-          date,
-          status: "planned",
-        },
-      });
-      created++;
+    let count = 0;
+    for (const w of weeks) {
+      for (const s of w.sessions) {
+        const offset = dayOffsets[(s.slot - 1) % dayOffsets.length] ?? (s.slot - 1) * 2;
+        let date = addDays(startMonday, (w.week - 1) * 7 + offset);
+        if (s.type === "race") date = raceDate;
+        if (s.type !== "race" && date < todayStart) continue; // ikke lag økter i fortiden
+        await tx.plannedSession.create({
+          data: {
+            userId: user.id,
+            week: w.week + weekOffset,
+            phase: w.phase,
+            phaseName: w.phaseName,
+            type: s.type,
+            slot: s.slot,
+            title: s.title,
+            description: s.description,
+            targetZone: s.targetZone ?? null,
+            targetPaceMinSec: s.paceMinSec ?? null,
+            targetPaceMaxSec: s.paceMaxSec ?? null,
+            plannedDistanceKm: s.distanceKm ?? null,
+            date,
+            status: "planned",
+          },
+        });
+        count++;
+      }
     }
-  }
+    return { created: count, removed: del.count };
+  });
 
   // Oppdater mål + lagre distanse i onboarding-svarene
   let answers: Record<string, unknown> = {};
@@ -418,5 +482,5 @@ export async function applyRegeneratedPlan(
     data: { raceName: opts.raceName, raceDate, onboardingAnswersJson: JSON.stringify(answers) },
   });
 
-  return { created, removed: del.count };
+  return { created, removed };
 }

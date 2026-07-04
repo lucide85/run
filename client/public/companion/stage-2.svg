@@ -1,0 +1,65 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title2">
+  <title id="title2">Joggelua – steg 2</title>
+  <defs>
+    <radialGradient id="body2" cx="0.35" cy="0.28" r="0.95">
+      <stop offset="0%" stop-color="#AEEAF2"/>
+      <stop offset="50%" stop-color="#4FBCCD"/>
+      <stop offset="100%" stop-color="#00768A"/>
+    </radialGradient>
+    <radialGradient id="rim2" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="72%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#004B57" stop-opacity="0.30"/>
+    </radialGradient>
+    <linearGradient id="band2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFB07E"/>
+      <stop offset="100%" stop-color="#F0824A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- bakkeskygge -->
+  <ellipse cx="200" cy="358" rx="96" ry="15" fill="#0A3A42" opacity="0.14"/>
+
+  <!-- små bein -->
+  <rect x="156" y="288" width="27" height="54" rx="13.5" fill="#00687A"/>
+  <rect x="217" y="288" width="27" height="54" rx="13.5" fill="#00687A"/>
+  <ellipse cx="168" cy="344" rx="24" ry="11" fill="#FFF6E8"/>
+  <ellipse cx="232" cy="344" rx="24" ry="11" fill="#FFF6E8"/>
+  <path d="M148 348 Q 168 354 188 348" stroke="#F0824A" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M212 348 Q 232 354 252 348" stroke="#F0824A" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- små armnubber -->
+  <ellipse cx="94" cy="226" rx="16" ry="24" fill="#1E9DB2" transform="rotate(20 94 226)"/>
+  <ellipse cx="306" cy="226" rx="16" ry="24" fill="#1E9DB2" transform="rotate(-20 306 226)"/>
+
+  <!-- kropp -->
+  <path d="M200 78 C 276 78 316 142 316 212 C 316 282 268 316 200 316 C 132 316 84 282 84 212 C 84 142 124 78 200 78 Z" fill="url(#body2)"/>
+  <path d="M200 78 C 276 78 316 142 316 212 C 316 282 268 316 200 316 C 132 316 84 282 84 212 C 84 142 124 78 200 78 Z" fill="url(#rim2)"/>
+
+  <!-- pannebånd -->
+  <path d="M94 152 C 130 118 270 118 306 152 L 300 180 C 268 150 132 150 100 180 Z" fill="url(#band2)"/>
+  <circle cx="200" cy="141" r="7" fill="#FFF6E8" opacity="0.95"/>
+
+  <!-- høylys -->
+  <ellipse cx="152" cy="106" rx="26" ry="15" fill="#FFFFFF" opacity="0.55" transform="rotate(-14 152 106)"/>
+  <circle cx="120" cy="200" r="8" fill="#FFFFFF" opacity="0.3"/>
+
+  <!-- øyne -->
+  <ellipse cx="164" cy="204" rx="17" ry="20" fill="#22333B"/>
+  <circle cx="158" cy="196" r="6.5" fill="#FFFFFF"/>
+  <circle cx="170" cy="211" r="2.6" fill="#FFFFFF" opacity="0.9"/>
+  <ellipse cx="236" cy="204" rx="17" ry="20" fill="#22333B"/>
+  <circle cx="230" cy="196" r="6.5" fill="#FFFFFF"/>
+  <circle cx="242" cy="211" r="2.6" fill="#FFFFFF" opacity="0.9"/>
+
+  <!-- kinn -->
+  <ellipse cx="132" cy="234" rx="13" ry="8" fill="#FF9F68" opacity="0.4"/>
+  <ellipse cx="268" cy="234" rx="13" ry="8" fill="#FF9F68" opacity="0.4"/>
+
+  <!-- glad, åpen munn med tunge -->
+  <path d="M174 236 Q 200 268 226 236 Q 200 248 174 236 Z" fill="#173037"/>
+  <ellipse cx="200" cy="248" rx="10" ry="5.5" fill="#FF8E7A"/>
+
+  <!-- trippe-streker -->
+  <path d="M120 332 Q 112 340 112 350" stroke="#9AD9E2" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M282 332 Q 290 340 290 350" stroke="#9AD9E2" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.7"/>
+</svg>

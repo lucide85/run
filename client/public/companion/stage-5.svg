@@ -1,0 +1,91 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title5">
+  <title id="title5">Legenden – steg 5</title>
+  <defs>
+    <radialGradient id="body5" cx="0.35" cy="0.25" r="0.95">
+      <stop offset="0%" stop-color="#AEEAF2"/>
+      <stop offset="50%" stop-color="#4FBCCD"/>
+      <stop offset="100%" stop-color="#00768A"/>
+    </radialGradient>
+    <radialGradient id="rim5" cx="0.5" cy="0.4" r="0.62">
+      <stop offset="72%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#004B57" stop-opacity="0.30"/>
+    </radialGradient>
+    <linearGradient id="cape5" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFB07E"/>
+      <stop offset="100%" stop-color="#E86F3A"/>
+    </linearGradient>
+    <linearGradient id="goldband5" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE9A8"/>
+      <stop offset="100%" stop-color="#F0B429"/>
+    </linearGradient>
+    <radialGradient id="medal5" cx="0.35" cy="0.3" r="0.9">
+      <stop offset="0%" stop-color="#FFF0BC"/>
+      <stop offset="55%" stop-color="#F7C948"/>
+      <stop offset="100%" stop-color="#D99A1B"/>
+    </radialGradient>
+  </defs>
+
+  <!-- bakkeskygge -->
+  <ellipse cx="200" cy="364" rx="100" ry="15" fill="#0A3A42" opacity="0.14"/>
+
+  <!-- liten kappe som blafrer bak -->
+  <path d="M150 148 C 96 198 78 288 98 340 C 140 326 168 316 200 314 C 232 316 260 326 302 340 C 322 288 304 198 250 148 C 234 136 166 136 150 148 Z" fill="url(#cape5)"/>
+  <path d="M150 148 C 120 180 106 232 106 232 C 130 220 150 214 162 214 Z" fill="#FFFFFF" opacity="0.25"/>
+
+  <!-- bein -->
+  <rect x="158" y="284" width="27" height="58" rx="13.5" fill="#00687A"/>
+  <rect x="215" y="284" width="27" height="58" rx="13.5" fill="#00687A"/>
+  <rect x="140" y="334" width="62" height="22" rx="11" fill="#FFF6E8"/>
+  <rect x="140" y="350" width="62" height="8" rx="4" fill="#E2BE8C"/>
+  <path d="M152 344 Q 166 352 180 348" stroke="#F0B429" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <rect x="198" y="334" width="62" height="22" rx="11" fill="#FFF6E8"/>
+  <rect x="198" y="350" width="62" height="8" rx="4" fill="#E2BE8C"/>
+  <path d="M210 344 Q 224 352 238 348" stroke="#F0B429" stroke-width="5" fill="none" stroke-linecap="round"/>
+
+  <!-- stolte armer i siden -->
+  <path d="M118 210 Q 92 224 92 250" stroke="#1E9DB2" stroke-width="24" fill="none" stroke-linecap="round"/>
+  <path d="M282 210 Q 308 224 308 250" stroke="#0F8CA0" stroke-width="24" fill="none" stroke-linecap="round"/>
+
+  <!-- kropp -->
+  <path d="M200 54 C 260 54 292 118 292 198 C 292 264 256 300 200 300 C 144 300 108 264 108 198 C 108 118 140 54 200 54 Z" fill="url(#body5)"/>
+  <path d="M200 54 C 260 54 292 118 292 198 C 292 264 256 300 200 300 C 144 300 108 264 108 198 C 108 118 140 54 200 54 Z" fill="url(#rim5)"/>
+
+  <!-- gyllent pannebånd -->
+  <path d="M114 128 C 146 98 254 98 286 128 L 280 154 C 252 128 148 128 120 154 Z" fill="url(#goldband5)"/>
+  <circle cx="200" cy="118" r="6.5" fill="#FFFDF3" opacity="0.95"/>
+
+  <!-- høylys -->
+  <ellipse cx="156" cy="86" rx="24" ry="14" fill="#FFFFFF" opacity="0.55" transform="rotate(-16 156 86)"/>
+  <circle cx="132" cy="188" r="8" fill="#FFFFFF" opacity="0.3"/>
+
+  <!-- øyne -->
+  <ellipse cx="168" cy="182" rx="16" ry="19" fill="#22333B"/>
+  <circle cx="162" cy="174" r="6" fill="#FFFFFF"/>
+  <circle cx="174" cy="189" r="2.5" fill="#FFFFFF" opacity="0.9"/>
+  <ellipse cx="232" cy="182" rx="16" ry="19" fill="#22333B"/>
+  <circle cx="226" cy="174" r="6" fill="#FFFFFF"/>
+  <circle cx="238" cy="189" r="2.5" fill="#FFFFFF" opacity="0.9"/>
+
+  <!-- kinn -->
+  <ellipse cx="140" cy="210" rx="12" ry="7" fill="#FF9F68" opacity="0.4"/>
+  <ellipse cx="260" cy="210" rx="12" ry="7" fill="#FF9F68" opacity="0.4"/>
+
+  <!-- stort stolt smil -->
+  <path d="M176 216 Q 200 240 224 216" stroke="#173037" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+
+  <!-- medaljebånd -->
+  <path d="M172 226 L 196 268 L 204 268 L 228 226 L 212 220 L 200 244 L 188 220 Z" fill="#D7263D"/>
+  <path d="M172 226 L 188 220 L 200 244 L 196 268 Z" fill="#B71F33"/>
+
+  <!-- gullmedalje med stjerne -->
+  <circle cx="200" cy="284" r="27" fill="url(#medal5)"/>
+  <circle cx="200" cy="284" r="27" fill="none" stroke="#B8860B" stroke-width="3" opacity="0.7"/>
+  <path d="M200 271 L 203.8 279 L 212.5 280.2 L 206.2 286.2 L 207.7 294.8 L 200 290.7 L 192.3 294.8 L 193.8 286.2 L 187.5 280.2 L 196.2 279 Z" fill="#FFFDF3"/>
+  <ellipse cx="190" cy="274" rx="7" ry="4" fill="#FFFFFF" opacity="0.6" transform="rotate(-24 190 274)"/>
+
+  <!-- glitter og stjerner rundt legenden -->
+  <path d="M320 92 l 4.5 11 11 4.5 -11 4.5 -4.5 11 -4.5 -11 -11 -4.5 11 -4.5 Z" fill="#FFD98A"/>
+  <path d="M76 110 l 3.5 8.5 8.5 3.5 -8.5 3.5 -3.5 8.5 -3.5 -8.5 -8.5 -3.5 8.5 -3.5 Z" fill="#FFD98A"/>
+  <path d="M330 220 l 3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 Z" fill="#9AD9E2" opacity="0.9"/>
+  <circle cx="64" cy="220" r="4" fill="#FFD98A" opacity="0.8"/>
+</svg>

@@ -1,6 +1,8 @@
 import { prisma } from "../db.js";
 import { getRecentActivities, downloadAndParse } from "./garmin.js";
 import { getUserById } from "./users.js";
+import { computeZones } from "../data/program.js";
+import { osloDayKeyMs, osloNoon } from "../lib/dates.js";
 import type { ParsedWorkout } from "./fit.js";
 
 export interface SyncResult {
@@ -10,8 +12,20 @@ export interface SyncResult {
   errors: string[];
 }
 
+// Én synk om gangen per bruker: et dobbeltklikk/overlappende kall gjenbruker
+// den pågående synken i stedet for å kappløpe om de samme aktivitetene.
+const runningSyncs = new Map<number, Promise<SyncResult>>();
+
 /** Henter nye aktiviteter fra Garmin for en bruker, lagrer og kobler til planlagte økter. */
-export async function syncGarmin(userId: number, limit = 20): Promise<SyncResult> {
+export function syncGarmin(userId: number, limit = 20): Promise<SyncResult> {
+  const existing = runningSyncs.get(userId);
+  if (existing) return existing;
+  const p = doSync(userId, limit).finally(() => runningSyncs.delete(userId));
+  runningSyncs.set(userId, p);
+  return p;
+}
+
+async function doSync(userId: number, limit: number): Promise<SyncResult> {
   const result: SyncResult = { imported: 0, skipped: 0, matched: 0, errors: [] };
   const user = await getUserById(userId);
   if (!user) throw new Error("Bruker finnes ikke");
@@ -38,7 +52,8 @@ export async function syncGarmin(userId: number, limit = 20): Promise<SyncResult
     }
     const typeKey = act.activityType?.typeKey ?? "";
     try {
-      const parsed = await downloadAndParse(user, act);
+      // Brukerens egne pulssoner styrer tid-i-sone-fordelingen som lagres.
+      const parsed = await downloadAndParse(user, act, computeZones(user.maxHr, user.restHr));
       const workout = await storeWorkout(userId, garminActivityId, act, parsed, typeKey);
       result.imported++;
       const matched = await matchToPlanned(userId, workout.id, parsed.startTime, parsed.distanceKm ?? null);
@@ -104,15 +119,23 @@ export async function matchToPlanned(
   const from = new Date(when.getTime() - 2 * dayMs);
   const to = new Date(when.getTime() + 2 * dayMs);
 
+  // Bare økter som fortsatt venter: en økt brukeren har hoppet over eller
+  // manuelt fullført skal IKKE stjeles av auto-matchingen.
   const candidates = await prisma.plannedSession.findMany({
-    where: { userId, workoutId: null, date: { gte: from, lte: to }, type: { not: "race" } },
+    where: {
+      userId,
+      workoutId: null,
+      status: { in: ["planned", "moved"] },
+      date: { gte: from, lte: to },
+      type: { not: "race" },
+    },
   });
   if (candidates.length === 0) return false;
 
-  // Antall hele kalenderdager mellom planlagt dag og øktens dag (0 = samme dag).
-  const dayKey = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  const workoutDay = dayKey(when);
-  const dayDiff = (d: Date) => Math.abs((dayKey(d) - workoutDay) / dayMs);
+  // Antall hele kalenderdager mellom planlagt dag og øktens dag (0 = samme dag),
+  // regnet i norsk lokaltid – en økt løpt 00:30 lørdag skal telle som lørdag.
+  const workoutDay = osloDayKeyMs(when);
+  const dayDiff = (d: Date) => Math.abs((osloDayKeyMs(d) - workoutDay) / dayMs);
   // Avvik mellom planlagt og faktisk distanse (ukjent planlagt distanse rangeres sist).
   const distDiff = (planned: number | null) =>
     planned != null && distanceKm != null ? Math.abs(planned - distanceKm) : Number.POSITIVE_INFINITY;
@@ -124,12 +147,17 @@ export async function matchToPlanned(
   });
 
   // Fullført-datoen settes til datoen økten FAKTISK ble gjennomført (ikke planlagt dag).
-  // Normaliser til kl 12 UTC for å være konsistent med resten av appens datoer.
-  const doneDate = new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), 12));
+  // Normaliser til kl 12 UTC på den NORSKE kalenderdagen (appens datokonvensjon).
+  const doneDate = osloNoon(when);
 
-  await prisma.plannedSession.update({
-    where: { id: candidates[0].id },
-    data: { workoutId, status: "completed", date: doneDate },
-  });
-  return true;
+  // Atomisk kobling: to samtidige økter kan ellers velge samme kandidat, der
+  // den siste stille overskriver den førstes kobling.
+  for (const candidate of candidates) {
+    const linked = await prisma.plannedSession.updateMany({
+      where: { id: candidate.id, workoutId: null },
+      data: { workoutId, status: "completed", date: doneDate },
+    });
+    if (linked.count > 0) return true;
+  }
+  return false;
 }

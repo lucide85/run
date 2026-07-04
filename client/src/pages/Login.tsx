@@ -36,11 +36,23 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div className="field">
             <label>E-post / brukernavn</label>
-            <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+            <input
+              className="input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoFocus
+            />
           </div>
           <div className="field">
             <label>Passord</label>
-            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
           </div>
           {error && <p style={{ color: "var(--error-500)", fontSize: 13.5, margin: 0 }}>{error}</p>}
           <button className="btn btn-primary btn-lg" type="submit" disabled={loading} style={{ marginTop: 4 }}>

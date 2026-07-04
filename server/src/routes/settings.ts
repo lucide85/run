@@ -5,11 +5,12 @@ import { currentUser } from "../auth.js";
 import { regenerateDates } from "../services/plan.js";
 import { encrypt } from "../lib/crypto.js";
 import { clearGarminClient, beginGarminLogin, completeGarminMfa } from "../services/garmin.js";
+import { ah } from "../lib/http.js";
 
 export const settingsRouter = Router();
 
 // Innstillinger for innlogget bruker (config gir kun standarder/feature-flagg)
-settingsRouter.get("/", async (req, res) => {
+settingsRouter.get("/", ah(async (req, res) => {
   const cfg = loadConfig();
   const user = await currentUser(req);
   res.json({
@@ -27,10 +28,10 @@ settingsRouter.get("/", async (req, res) => {
     googleEnabled: cfg.google.enabled,
     lastSync: user.lastGarminSync,
   });
-});
+}));
 
 // Oppdater treningsdager / pulsverdier
-settingsRouter.put("/", async (req, res) => {
+settingsRouter.put("/", ah(async (req, res) => {
   const user = await currentUser(req);
   const { days, maxHr, restHr, watchModel } = req.body ?? {};
   const data: Record<string, unknown> = {};
@@ -48,12 +49,12 @@ settingsRouter.put("/", async (req, res) => {
   if (regenerate) await regenerateDates(user.id, days);
 
   res.json({ ok: true, regenerated: regenerate });
-});
+}));
 
 // Koble (eller oppdatere) Garmin-konto for innlogget bruker.
 // Logger inn med en gang; hvis kontoen har to-faktor returneres mfaRequired,
 // og klienten må sende koden til POST /garmin/mfa.
-settingsRouter.post("/garmin", async (req, res) => {
+settingsRouter.post("/garmin", ah(async (req, res) => {
   const user = await currentUser(req);
   const { email, password } = req.body ?? {};
   if (!email || !password) return res.status(400).json({ error: "email og password kreves" });
@@ -70,10 +71,10 @@ settingsRouter.post("/garmin", async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
-});
+}));
 
 // Fullfør to-faktor-innlogging med sikkerhetskoden brukeren mottok.
-settingsRouter.post("/garmin/mfa", async (req, res) => {
+settingsRouter.post("/garmin/mfa", ah(async (req, res) => {
   const user = await currentUser(req);
   const { code } = req.body ?? {};
   if (!code || !String(code).trim()) return res.status(400).json({ error: "code kreves" });
@@ -85,10 +86,10 @@ settingsRouter.post("/garmin/mfa", async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
-});
+}));
 
 // Koble fra Garmin
-settingsRouter.delete("/garmin", async (req, res) => {
+settingsRouter.delete("/garmin", ah(async (req, res) => {
   const user = await currentUser(req);
   await prisma.user.update({
     where: { id: user.id },
@@ -96,4 +97,4 @@ settingsRouter.delete("/garmin", async (req, res) => {
   });
   clearGarminClient(user.id);
   res.json({ ok: true });
-});
+}));

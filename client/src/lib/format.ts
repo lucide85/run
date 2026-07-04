@@ -1,7 +1,9 @@
 export function pace(secPerKm?: number | null): string {
   if (!secPerKm || secPerKm <= 0) return "–";
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
+  // Rund av totalen først – ellers kan 299,6 s bli «4:60» i stedet for «5:00»
+  const total = Math.round(secPerKm);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
@@ -17,6 +19,24 @@ export function duration(sec?: number | null): string {
 export function dist(km?: number | null): string {
   if (km == null) return "–";
   return `${km.toFixed(2)} km`;
+}
+
+/** ISO 8601-ukenummer (uke 1 = uken med årets første torsdag). */
+export function isoWeek(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const diff = (date.getTime() - firstThursday.getTime()) / 86400000;
+  return 1 + Math.round((diff - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+}
+
+/** Året ISO-uken tilhører (kan avvike fra kalenderåret rundt nyttår). */
+export function isoWeekYear(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  return date.getUTCFullYear();
 }
 
 export function dateNo(iso: string): string {

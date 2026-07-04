@@ -20,6 +20,17 @@ export interface ParsedLap {
   durationSec?: number;
   avgHr?: number;
   avgPaceSecPerKm?: number;
+  maxHr?: number;
+  /** FIT lap intensity fra strukturerte økter: active | rest | warmup | cooldown | recovery | interval */
+  intensity?: string;
+  lapTrigger?: string;
+  wktStepIndex?: number;
+}
+
+/** Minimal soneliste for tid-i-sone-beregning (per bruker via computeZones, ellers HR_ZONES). */
+export interface ZoneDef {
+  zone: number;
+  max: number;
 }
 
 export interface ParsedWorkout {
@@ -38,8 +49,8 @@ export interface ParsedWorkout {
   hrZoneSeconds: Record<number, number>;
 }
 
-function zoneForHr(hr: number): number {
-  for (const z of HR_ZONES) {
+function zoneForHr(hr: number, zones: ZoneDef[]): number {
+  for (const z of zones) {
     if (hr <= z.max) return z.zone;
   }
   return 5;
@@ -50,8 +61,8 @@ function speedKmhToPace(speedKmh?: number): number | undefined {
   return Math.round(3600 / speedKmh);
 }
 
-/** Parser en FIT-buffer til en strukturert økt. */
-export function parseFit(buffer: Buffer): Promise<ParsedWorkout> {
+/** Parser en FIT-buffer til en strukturert økt. Soner brukes til tid-i-sone (per bruker). */
+export function parseFit(buffer: Buffer, zones: ZoneDef[] = HR_ZONES): Promise<ParsedWorkout> {
   return new Promise((resolve, reject) => {
     const parser = new FitParser({
       force: true,
@@ -63,7 +74,7 @@ export function parseFit(buffer: Buffer): Promise<ParsedWorkout> {
     parser.parse(buffer, (error: string | null, data: any) => {
       if (error) return reject(new Error(error));
       try {
-        resolve(buildWorkout(data));
+        resolve(buildWorkout(data, zones));
       } catch (e) {
         reject(e as Error);
       }
@@ -71,7 +82,7 @@ export function parseFit(buffer: Buffer): Promise<ParsedWorkout> {
   });
 }
 
-function buildWorkout(data: any): ParsedWorkout {
+function buildWorkout(data: any, zones: ZoneDef[]): ParsedWorkout {
   const session = (data.sessions && data.sessions[0]) || {};
   const records: any[] = data.records || [];
 
@@ -82,13 +93,22 @@ function buildWorkout(data: any): ParsedWorkout {
   const hrZoneSeconds: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   let prevMs = startMs;
 
+  // Kadens i FIT er per bein (rpm) for løping/gange → dobles til steg/min.
+  // For sykling o.l. er verdien allerede riktig og skal IKKE dobles.
+  const sportName = String(session.sport ?? "").toLowerCase();
+  const doubleCadence =
+    sportName === "" || ["running", "walking", "hiking", "trail"].some((s) => sportName.includes(s));
+  const cadenceFactor = doubleCadence ? 2 : 1;
+
   for (const r of records) {
     if (!r.timestamp) continue;
     const tMs = new Date(r.timestamp).getTime();
     const t = Math.round((tMs - startMs) / 1000);
     const pace = speedKmhToPace(r.speed ?? r.enhanced_speed);
     const cadence =
-      r.cadence != null ? Math.round(r.cadence * 2 + (r.fractional_cadence ?? 0) * 2) : undefined;
+      r.cadence != null
+        ? Math.round((r.cadence + (r.fractional_cadence ?? 0)) * cadenceFactor)
+        : undefined;
     // fit-file-parser skalerer altitude med lengthUnit (km) → gjør om til meter.
     const altKm = r.altitude ?? r.enhanced_altitude;
     const altitude = altKm != null ? Math.round(altKm * 1000 * 10) / 10 : undefined;
@@ -104,7 +124,7 @@ function buildWorkout(data: any): ParsedWorkout {
 
     if (r.heart_rate) {
       const dt = Math.max(0, Math.min(10, (tMs - prevMs) / 1000)); // klamp uteliggere
-      hrZoneSeconds[zoneForHr(r.heart_rate)] += dt;
+      hrZoneSeconds[zoneForHr(r.heart_rate, zones)] += dt;
     }
     prevMs = tMs;
   }
@@ -129,6 +149,12 @@ function buildWorkout(data: any): ParsedWorkout {
     durationSec: lap.total_timer_time ? Math.round(lap.total_timer_time) : undefined,
     avgHr: lap.avg_heart_rate,
     avgPaceSecPerKm: speedKmhToPace(lap.avg_speed ?? lap.enhanced_avg_speed),
+    maxHr: lap.max_heart_rate,
+    // Strukturerte økter (intervall-/treningsøkt på klokka) merker rundene med
+    // intensitet (active/rest/warmup/cooldown) – avgjørende for intervallanalyse.
+    intensity: typeof lap.intensity === "string" ? lap.intensity : undefined,
+    lapTrigger: typeof lap.lap_trigger === "string" ? lap.lap_trigger : undefined,
+    wktStepIndex: typeof lap.wkt_step_index === "number" ? lap.wkt_step_index : undefined,
   }));
 
   const distanceKm = session.total_distance;
@@ -140,7 +166,7 @@ function buildWorkout(data: any): ParsedWorkout {
     session.avg_running_cadence != null
       ? Math.round(session.avg_running_cadence * 2)
       : session.avg_cadence != null
-        ? Math.round(session.avg_cadence * 2)
+        ? Math.round(session.avg_cadence * cadenceFactor)
         : undefined;
 
   return {

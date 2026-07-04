@@ -15,6 +15,7 @@ const TRENING: NavItem[] = [
   { to: "/program", label: "Program", icon: "fa-clipboard-list" },
   { to: "/okter", label: "Økter", icon: "fa-shoe-prints" },
   { to: "/progresjon", label: "Progresjon", icon: "fa-chart-line" },
+  { to: "/kompis", label: "Kompis", icon: "fa-egg" },
 ];
 
 function BrandMark({ size }: { size?: number }) {
@@ -78,7 +79,15 @@ export function Layout({ children, me, onLogout }: { children: ReactNode; me: Me
           <button className="navitem" onClick={logout}>
             <i className="fa-solid fa-right-from-bracket" /> Logg ut
           </button>
-          <div className="rail-user" onClick={() => navigate("/innstillinger")}>
+          <div
+            className="rail-user"
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate("/innstillinger")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") navigate("/innstillinger");
+            }}
+          >
             <div className="av">{nickname.charAt(0).toUpperCase()}</div>
             <div className="who">
               <b>{nickname}</b>
@@ -102,7 +111,7 @@ export function Layout({ children, me, onLogout }: { children: ReactNode; me: Me
 
       {/* Mobil skuff */}
       <div className={`drawer-scrim ${open ? "open" : ""}`} onClick={() => setOpen(false)} />
-      <div className={`drawer ${open ? "open" : ""}`}>
+      <div className={`drawer ${open ? "open" : ""}`} role="dialog" aria-modal="true" aria-label="Meny">
         <div className="brand" style={{ paddingBottom: 10 }}>
           <BrandMark size={36} />
           <div className="wm">

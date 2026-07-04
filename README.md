@@ -10,6 +10,10 @@ oppfølgingsspørsmål, og la AI tilpasse programmet fram mot løpsdagen **1. ok
 - 🗑️ Slett irrelevante økter – de synkroniseres ikke inn igjen senere
 - ✨ Claude vurderer øktene, svarer på oppfølgingsspørsmål og foreslår planjusteringer
 - 📈 Grafer og tabeller for tempo, volum, puls-effektivitet og vekt
+- 🏃 **Intervall-analyse**: drag og pauser gjenkjennes (FIT-intensitet eller heuristikk),
+  og AI-en vurderer dragene – ikke snittpulsen for hele økten
+- 🐣 **Treningskompis**: en søt figur som utvikler seg gjennom 6 steg etter hvert som du
+  fullfører økter (egen side under «Kompis», feiring ved hver utvikling)
 - 🔐 Innlogging fra config-fil, men fri tilgang når du sitter lokalt
 - 📱 Lyst, moderne og mobilvennlig – **installerbar som app (PWA)** på mobil
 
@@ -138,7 +142,11 @@ curl -I http://localhost:3001  # skal svare 200/302
 ```
 
 Databasen (SQLite) lagres på Docker-volumet `treningsapp-data` og overlever omstart og
-oppdatering. Skjemaet opprettes automatisk første gang (`prisma db push` i `docker-entrypoint.sh`).
+oppdatering. Skjemaet håndteres av **Prisma Migrate** (`prisma migrate deploy` i
+`docker-entrypoint.sh`): ved hver oppstart tas først en **automatisk sikkerhetskopi**
+(`backup-<tidspunkt>.db`, de 7 nyeste beholdes på volumet), en eksisterende database
+baselines automatisk, og ventende migreringer kjøres. En destruktiv skjemaendring vil
+**feile høyt** i stedet for å slette data i det stille.
 
 ### Steg 3 – Finn detaljene i din Traefik (siden du er usikker)
 
@@ -208,11 +216,32 @@ docker compose up -d --build   # bygger nytt image og bytter container; data beh
 
 - **Localhost-bypass gjelder kun på app-VM-en selv.** All trafikk via Traefik kommer utenfra
   og krever derfor innlogging – akkurat som ønsket. Sekundærbrukere kan nå logge inn herfra.
-- **Økter (sesjoner) ligger i minnet.** Ved omstart av containeren må man logge inn på nytt.
-  (Kan flyttes til en vedvarende store senere ved behov.)
-- **Backup:** ta vare på `config.json` og Docker-volumet `treningsapp-data`
-  (`docker run --rm -v treningsapp-data:/d -v $PWD:/b busybox tar czf /b/db-backup.tgz -C /d .`).
+- **Innlogginger overlever omstart.** Sesjoner lagres som filer på datavolumet
+  (`sessions/`-mappa) – ingen re-innlogging etter oppdatering.
+- **Innloggingsforsøk er rate-begrenset** (20 per kvarter). Vil du at begrensningen (og
+  logger) skal se den EKTE klient-IP-en bak Traefik, legg Traefik-VM-ens IP i
+  `server.trustedProxies` i `config.json` (f.eks. `["192.168.1.x"]`).
+- **Backup:** containeren tar automatisk en konsistent kopi av databasen på volumet ved
+  hver oppstart/oppdatering (7 siste beholdes). Ta i tillegg jevnlig kopi UT av VM-en, f.eks.
+  daglig cron: `docker run --rm -v treningsapp-data:/d -v /home/<bruker>/backup:/b alpine cp /d/treningsapp.db /b/treningsapp-$(date +\%F).db`
+  (kjør helst mens appen er rolig, eller stopp containeren først for garantert konsistens).
+  Ta også vare på `config.json`.
 - **HTTPS** håndteres 100 % av Traefik; containeren snakker ren HTTP internt på 3001.
+
+### Etter oppgradering til intervall-analysen (engangs)
+
+AI-vurderingen forstår nå drag/pauser i intervalløkter i stedet for å dømme økten på
+snittpulsen. For å få **oppdatert vurdering på allerede gjennomførte intervalløkter**:
+
+```bash
+docker compose exec treningsapp node server/dist/scripts/refreshIntervalFeedback.js
+```
+
+(Lokalt: `npm -w server run refresh:interval-feedback`. Legg til `-- --dry-run` for å se
+hva som ville blitt oppdatert først.) Gammel vurdering beholdes i historikken; den nye
+legges til under, merket «🔁 Oppdatert vurdering med intervallanalyse». Scriptet er trygt
+å kjøre flere ganger – allerede oppdaterte økter hoppes over. Merk: bruker Claude-API-et
+(én vurdering per intervalløkt).
 
 ---
 
@@ -235,7 +264,9 @@ Databasen er en enkelt SQLite-fil: `server/prisma/treningsapp.db`.
 | Kommando | Hva |
 |---|---|
 | `npm run dev` | Kjør frontend + backend i utviklingsmodus |
-| `npm run db:push` | Opprett/oppdater databaseskjema |
+| `npm run db:push` | Opprett/oppdater databaseskjema (dev; feiler ved destruktive endringer) |
+| `npm -w server run db:migrate` | Kjør ventende migreringer (som i produksjon) |
+| `npm -w server run refresh:interval-feedback` | Regenerer AI-vurdering for gamle intervalløkter |
 | `npm run seed` | Seed programmet (`-- --force` for å regenerere) |
 | `npm run garmin:login` | Logg inn mot Garmin (håndterer MFA) |
 | `npm -w server run db:studio` | Åpne Prisma Studio for å se data |

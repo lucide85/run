@@ -2,8 +2,12 @@ import { Router } from "express";
 import { prisma } from "../db.js";
 import { PROGRAM, PHASE_GOALS, HR_ZONES } from "../data/program.js";
 import { currentUserId } from "../auth.js";
+import { ah, parseDate } from "../lib/http.js";
+import { osloNoon } from "../lib/dates.js";
 
 export const planRouter = Router();
+
+const SESSION_STATUSES = new Set(["planned", "completed", "skipped", "moved"]);
 
 // Statisk programstruktur (faser, soner) for visning
 planRouter.get("/structure", (_req, res) => {
@@ -11,7 +15,7 @@ planRouter.get("/structure", (_req, res) => {
 });
 
 // Alle planlagte økter for innlogget bruker (med ev. koblet økt)
-planRouter.get("/sessions", async (req, res) => {
+planRouter.get("/sessions", ah(async (req, res) => {
   const userId = currentUserId(req);
   const sessions = await prisma.plannedSession.findMany({
     where: { userId },
@@ -19,10 +23,10 @@ planRouter.get("/sessions", async (req, res) => {
     include: { workout: true },
   });
   res.json(sessions);
-});
+}));
 
 // Én planlagt økt
-planRouter.get("/sessions/:id", async (req, res) => {
+planRouter.get("/sessions/:id", ah(async (req, res) => {
   const userId = currentUserId(req);
   const session = await prisma.plannedSession.findFirst({
     where: { id: Number(req.params.id), userId },
@@ -30,10 +34,10 @@ planRouter.get("/sessions/:id", async (req, res) => {
   });
   if (!session) return res.status(404).json({ error: "Ikke funnet" });
   res.json(session);
-});
+}));
 
 // Oppdater en planlagt økt (flytt dato, endre status, notat)
-planRouter.patch("/sessions/:id", async (req, res) => {
+planRouter.patch("/sessions/:id", ah(async (req, res) => {
   const userId = currentUserId(req);
   const id = Number(req.params.id);
   const { date, status, notes } = req.body ?? {};
@@ -56,19 +60,31 @@ planRouter.patch("/sessions/:id", async (req, res) => {
 
   const data: Record<string, unknown> = {};
   if (date !== undefined) {
-    data.date = new Date(date);
+    const d = parseDate(date);
+    if (!d) return res.status(400).json({ error: "Ugyldig dato" });
+    data.date = d;
     data.status = status ?? "moved";
   }
-  if (status !== undefined) data.status = status;
-  if (notes !== undefined) data.notes = notes; // notat er alltid tillatt
+  if (status !== undefined) {
+    if (typeof status !== "string" || !SESSION_STATUSES.has(status)) {
+      return res.status(400).json({ error: "Ugyldig status" });
+    }
+    data.status = status;
+  }
+  if (notes !== undefined) {
+    if (notes !== null && typeof notes !== "string") {
+      return res.status(400).json({ error: "Ugyldig notat" });
+    }
+    data.notes = notes; // notat er alltid tillatt
+  }
 
   const updated = await prisma.plannedSession.update({ where: { id }, data });
   res.json(updated);
-});
+}));
 
 // Manuell kobling: velg hvilken treningsøkt som hører til denne planlagte økten
 // (workoutId = null fjerner koblingen). Overstyrer auto-matchingen.
-planRouter.patch("/sessions/:id/link", async (req, res) => {
+planRouter.patch("/sessions/:id/link", ah(async (req, res) => {
   const userId = currentUserId(req);
   const id = Number(req.params.id);
   const { workoutId } = req.body ?? {};
@@ -89,9 +105,8 @@ planRouter.patch("/sessions/:id/link", async (req, res) => {
   const workout = await prisma.workout.findFirst({ where: { id: Number(workoutId), userId } });
   if (!workout) return res.status(404).json({ error: "Treningsøkt ikke funnet" });
 
-  // Fullført-dato = øktens faktiske dato (kl 12 UTC, konsistent med resten)
-  const w = workout.startTime;
-  const doneDate = new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate(), 12));
+  // Fullført-dato = øktens faktiske NORSKE kalenderdag (kl 12 UTC, konsistent med resten)
+  const doneDate = osloNoon(workout.startTime);
 
   // workoutId er unik på planlagt økt: frigjør evt. annen økt som allerede peker på denne
   // treningsøkten, før vi kobler den hit. Gjøres i én transaksjon.
@@ -107,4 +122,4 @@ planRouter.patch("/sessions/:id/link", async (req, res) => {
     });
   });
   res.json(updated);
-});
+}));

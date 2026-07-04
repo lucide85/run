@@ -13,7 +13,7 @@ const GarminConnectCtor: any =
   (GarminConnectModule as any)?.GarminConnect ?? (GarminConnectModule as any)?.default?.GarminConnect;
 import { prisma } from "../db.js";
 import { decrypt } from "../lib/crypto.js";
-import { parseFit, type ParsedWorkout } from "./fit.js";
+import { parseFit, type ParsedWorkout, type ZoneDef } from "./fit.js";
 import {
   startGarminLogin,
   submitGarminMfa,
@@ -130,7 +130,11 @@ export async function getRecentActivities(user: User, limit = 20): Promise<Garmi
   return activities as GarminActivitySummary[];
 }
 
-export async function downloadAndParse(user: User, activity: GarminActivitySummary): Promise<ParsedWorkout> {
+export async function downloadAndParse(
+  user: User,
+  activity: GarminActivitySummary,
+  zones?: ZoneDef[]
+): Promise<ParsedWorkout> {
   const client = await getGarminClient(user);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "garmin-"));
   try {
@@ -138,7 +142,7 @@ export async function downloadAndParse(user: User, activity: GarminActivitySumma
     await client.downloadOriginalActivityData(activity, tmpDir);
     const fitBuffer = findFitBuffer(tmpDir);
     if (!fitBuffer) throw new Error("Fant ingen FIT-fil i nedlastet aktivitetsdata.");
-    return await parseFit(fitBuffer);
+    return await parseFit(fitBuffer, zones);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
