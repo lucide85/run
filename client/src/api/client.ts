@@ -86,6 +86,54 @@ export interface Settings {
   garminConnected: boolean;
   googleEnabled: boolean;
   lastSync?: string | null;
+  home: { lat: number | null; lon: number | null; place: string | null };
+}
+
+export interface RecordEntry {
+  key: string;
+  label: string;
+  value: number;
+  unit: "sec" | "km" | "m" | "secPerKm";
+  workoutId: number | null;
+  date: string;
+  extra?: string;
+}
+
+export interface FitnessDay {
+  date: string;
+  load: number;
+  ctl: number;
+  atl: number;
+  tsb: number;
+}
+
+export interface FitnessPredictionPoint {
+  date: string;
+  predictedSec: number;
+  basedOn: "5k" | "1k";
+}
+
+export interface FitnessData {
+  days: FitnessDay[];
+  prediction: {
+    current: FitnessPredictionPoint | null;
+    history: FitnessPredictionPoint[];
+  };
+}
+
+export interface WeatherForecast {
+  date: string;
+  tempMin: number;
+  tempMax: number;
+  windMax: number;
+  precipMm: number;
+  symbol: string;
+}
+
+export interface WeatherUpcoming {
+  configured: boolean;
+  place: string | null;
+  sessions: { sessionId: number; date: string; forecast: WeatherForecast | null }[];
 }
 
 export interface Me {
@@ -222,7 +270,13 @@ export const api = {
 
   // settings
   settings: () => req<Settings>("/api/settings"),
-  updateSettings: (data: Partial<Settings["training"]>) =>
+  updateSettings: (
+    data: Partial<Settings["training"]> & {
+      homeLat?: number | null;
+      homeLon?: number | null;
+      homePlace?: string | null;
+    }
+  ) =>
     req<{ ok: true; regenerated: boolean }>("/api/settings", { method: "PUT", body: JSON.stringify(data) }),
   connectGarmin: (email: string, password: string) =>
     req<{ ok: true; mfaRequired: boolean }>("/api/settings/garmin", {
@@ -247,6 +301,11 @@ export const api = {
   adminResetPassword: (id: number) =>
     req<{ password: string }>(`/api/admin/users/${id}/reset-password`, { method: "POST" }),
   adminDeleteUser: (id: number) => req<{ ok: true }>(`/api/admin/users/${id}`, { method: "DELETE" }),
+
+  // rekorder / form / vær
+  records: () => req<{ records: RecordEntry[] }>("/api/records"),
+  fitness: () => req<FitnessData>("/api/fitness"),
+  weatherUpcoming: () => req<WeatherUpcoming>("/api/weather/upcoming"),
 
   // weight
   weight: () => req<WeightLog[]>("/api/weight"),

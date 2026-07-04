@@ -1,15 +1,19 @@
 import { useEffect, useState, ReactNode } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Legend,
+  ReferenceLine,
 } from "recharts";
-import { api, Workout, WeightLog } from "../api/client";
+import { api, Workout, WeightLog, FitnessData } from "../api/client";
 import { PageTitle, Spinner, Button, Card } from "../components/ui";
-import { pace, dateShort, isoWeek, isoWeekYear } from "../lib/format";
+import { pace, dateShort, isoWeek, isoWeekYear, timeHms } from "../lib/format";
 
 const C_PACE = "#2C4894"; // secondary
 const C_VOL = "#7A52CC"; // langtur
 const C_HR = "#D7263D"; // løp
 const C_WEIGHT = "#008094"; // primary
+const C_CTL = "#008094"; // form (teal)
+const C_ATL = "#E59B2E"; // slitasje (oransje)
+const C_TSB = "#8A8A90"; // overskudd (grå)
 
 /** Dagens dato som «YYYY-MM-DD» i lokal tid (toISOString gir gårsdagen før kl. 01/02). */
 function localDateStr(d = new Date()): string {
@@ -34,6 +38,7 @@ function ChartCard({ title, sub, children, foot }: { title: string; sub?: string
 export default function Progress() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [weights, setWeights] = useState<WeightLog[]>([]);
+  const [fitness, setFitness] = useState<FitnessData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [wDate, setWDate] = useState(localDateStr());
@@ -44,9 +49,11 @@ export default function Progress() {
   async function load() {
     setError(null);
     try {
-      const [w, wl] = await Promise.all([api.workouts(), api.weight()]);
+      // Formkurven er ny funksjonalitet – siden skal rendre selv om den feiler
+      const [w, wl, fit] = await Promise.all([api.workouts(), api.weight(), api.fitness().catch(() => null)]);
       setWorkouts([...w].reverse());
       setWeights(wl);
+      setFitness(fit);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -119,9 +126,122 @@ export default function Progress() {
 
   const weightData = weights.map((w) => ({ date: dateShort(w.date), kg: w.weightKg }));
 
+  // Formkurve: siste 120 dager med form (CTL), slitasje (ATL) og overskudd (TSB)
+  const fitnessDays = (fitness?.days ?? []).slice(-120);
+  const fitnessData = fitnessDays.map((d) => ({
+    date: dateShort(d.date),
+    ctl: Math.round(d.ctl * 10) / 10,
+    atl: Math.round(d.atl * 10) / 10,
+    tsb: Math.round(d.tsb * 10) / 10,
+  }));
+  // Vis omtrent månedlige merker på x-aksen
+  const fitnessTickInterval = Math.max(0, Math.ceil(fitnessData.length / 5) - 1);
+
+  const pred = fitness?.prediction ?? null;
+  const predCurrent = pred?.current ?? null;
+  const predHistory = pred?.history ?? [];
+  const predTrend = predHistory.map((p) => ({ date: dateShort(p.date), sec: p.predictedSec }));
+
+  // Endring siste måned: sammenlign med det eldste prognosepunktet nyere enn 35 dager
+  let predDelta: number | null = null;
+  if (predCurrent && predHistory.length > 0) {
+    const cutoff = new Date(predCurrent.date).getTime() - 35 * 86400000;
+    const monthAgo = predHistory.find(
+      (p) => new Date(p.date).getTime() >= cutoff && new Date(p.date).getTime() < new Date(predCurrent.date).getTime()
+    );
+    if (monthAgo) predDelta = monthAgo.predictedSec - predCurrent.predictedSec;
+  }
+
   return (
     <div>
       <PageTitle title="Progresjon" subtitle="Utvikling over tid — slik bygger formen seg" />
+
+      {fitness && (
+        <div className="grid g2" style={{ marginBottom: 18 }}>
+          <ChartCard title="Løpsprognose 10 km">
+            {predCurrent ? (
+              <div>
+                <div className="flex items-center gap12 wrap">
+                  <span className="tnum" style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1 }}>
+                    {timeHms(predCurrent.predictedSec)}
+                  </span>
+                  {predDelta != null && Math.abs(predDelta) >= 1 && (
+                    <span
+                      className="chip"
+                      style={{
+                        border: "1px solid var(--border-subtle)",
+                        color: predDelta > 0 ? "var(--t-fullfort)" : "var(--error-500)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {predDelta > 0 ? "▼" : "▲"} {timeHms(Math.abs(predDelta))} siste måned
+                    </span>
+                  )}
+                </div>
+                <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
+                  basert på beste {predCurrent.basedOn === "1k" ? "1 km" : "5 km"}-innsats siste 6 uker
+                  {predCurrent.basedOn === "1k" && " (usikker – løp en lengre hard økt for bedre anslag)"}
+                </div>
+                {predTrend.length >= 2 && (
+                  <ResponsiveContainer width="100%" height={130}>
+                    <LineChart data={predTrend} margin={{ left: 5, right: 10, top: 14 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ECEDEE" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#CACACE" />
+                      <YAxis
+                        reversed
+                        tickFormatter={(v) => timeHms(v)}
+                        tick={{ fontSize: 11 }}
+                        stroke="#CACACE"
+                        width={54}
+                        domain={["dataMin - 30", "dataMax + 30"]}
+                      />
+                      <Tooltip formatter={(v) => [timeHms(v as number), "Prognose"]} />
+                      <Line type="monotone" dataKey="sec" stroke={C_WEIGHT} strokeWidth={2.5} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            ) : (
+              <Empty text="Ingen prognose ennå – fullfør noen løpeturer først." />
+            )}
+          </ChartCard>
+
+          <ChartCard
+            title="Formkurve"
+            foot={
+              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Form bygges sakte (42 dager), slitasje kommer raskt (7 dager). Positivt overskudd = uthvilt.
+              </div>
+            }
+          >
+            {fitnessData.length === 0 ? (
+              <Empty />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={fitnessData} margin={{ left: -5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ECEDEE" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#CACACE" interval={fitnessTickInterval} />
+                  <YAxis tick={{ fontSize: 11 }} stroke="#CACACE" />
+                  <ReferenceLine y={0} stroke="#CACACE" strokeDasharray="4 4" />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="ctl" name="Form" stroke={C_CTL} strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" dataKey="atl" name="Slitasje" stroke={C_ATL} strokeWidth={1.5} dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="tsb"
+                    name="Overskudd"
+                    stroke={C_TSB}
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+        </div>
+      )}
 
       <div className="grid g2">
         <ChartCard title="Tempoutvikling" sub="Lavere er raskere. Trenden går rett vei.">

@@ -3,6 +3,7 @@ import { prisma } from "../db.js";
 import { currentUser } from "../auth.js";
 import { ah, parseDate } from "../lib/http.js";
 import { recentHistory, periodComparison } from "../services/history.js";
+import { forecastForDay, describeForecast } from "../services/weather.js";
 import {
   evaluateWorkout,
   chatAboutWorkout,
@@ -101,7 +102,18 @@ aiRouter.post("/sessions/:id/watch-tips", ah(async (req, res) => {
   }
 
   try {
-    const tips = await generateWatchTips(user, session);
+    // Værmelding for øktdagen flettes inn når hjemsted er satt og datoen
+    // er innenfor yr-horisonten (~9 dager). Feiler stille.
+    let weatherText: string | null = null;
+    if (user.homeLat != null && user.homeLon != null) {
+      try {
+        const f = await forecastForDay(user.homeLat, user.homeLon, session.date.toISOString().slice(0, 10));
+        if (f) weatherText = describeForecast(f);
+      } catch {
+        weatherText = null;
+      }
+    }
+    const tips = await generateWatchTips(user, session, weatherText);
     await prisma.plannedSession.update({
       where: { id },
       data: { watchTips: tips, watchTipsFor: cacheKey },

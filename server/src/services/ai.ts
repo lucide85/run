@@ -265,7 +265,11 @@ Brukeren kan stille spørsmål om hvordan økten bør gjennomføres (terreng, l�
  * er bra for løperen nå – treningseffekter, hvordan den skal kjennes, og til slutt
  * en LITEN del om hvordan klokka settes opp. Skaleres etter hvor sammensatt økten er.
  */
-export async function generateWatchTips(user: User, session: PlannedSession): Promise<string> {
+export async function generateWatchTips(
+  user: User,
+  session: PlannedSession,
+  weatherText?: string | null
+): Promise<string> {
   const fmtPace = (s?: number | null) =>
     s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} min/km` : null;
 
@@ -300,7 +304,7 @@ ${session.description}
 ${session.targetZone ? `Målsone: ${session.targetZone}${zoneInfo ? ` (${zoneInfo})` : ""}` : ""}
 ${paceRange ? `Måltempo: ${paceRange}` : ""}
 ${session.plannedDistanceKm ? `Planlagt distanse: ${session.plannedDistanceKm} km` : ""}
-
+${weatherText ? `VÆRMELDING for øktdagen (fra yr/MET): ${weatherText} – flett inn ett kort, konkret vær-/klesråd der det passer naturlig.` : ""}
 ${watch}
 
 KRAV TIL SVARET (markdown på norsk, vennlig "du"-form):

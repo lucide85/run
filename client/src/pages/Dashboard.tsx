@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, Me, PlannedSession, Settings, Workout } from "../api/client";
+import { api, Me, PlannedSession, Settings, Workout, FitnessData, WeatherUpcoming } from "../api/client";
 import { Button, PageTitle, Spinner, Ring, TypeBadge } from "../components/ui";
-import { dateNo, dist, pace, SESSION_COLORS } from "../lib/format";
+import { dateNo, dist, pace, timeHms, SESSION_COLORS } from "../lib/format";
 import { SyncButton } from "../components/SyncButton";
 import { Companion } from "../components/Companion";
+import { WeatherChip } from "../components/WeatherChip";
 
 // Modul-nivå vakt så auto-synk bare fyres én gang per sidelast
 // (React StrictMode dobbeltmonterer effekter i dev).
@@ -30,17 +31,29 @@ export default function Dashboard() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [me, setMe] = useState<Me | null>(null);
+  const [fitness, setFitness] = useState<FitnessData | null>(null);
+  const [weather, setWeather] = useState<WeatherUpcoming | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   async function load(): Promise<Settings | null> {
     try {
       setError(false);
-      const [s, w, st, m] = await Promise.all([api.sessions(), api.workouts(), api.settings(), api.me()]);
+      // Formkurve og vær er kosmetisk pynt – oversikten skal aldri knekke om de feiler
+      const [s, w, st, m, fit, wx] = await Promise.all([
+        api.sessions(),
+        api.workouts(),
+        api.settings(),
+        api.me(),
+        api.fitness().catch(() => null),
+        api.weatherUpcoming().catch(() => null),
+      ]);
       setSessions(s);
       setWorkouts(w);
       setSettings(st);
       setMe(m);
+      setFitness(fit);
+      setWeather(wx);
       return st;
     } catch (e) {
       console.warn("Kunne ikke laste oversikten:", e);
@@ -118,6 +131,9 @@ export default function Dashboard() {
 
   const next = upcoming[0];
   const raceDays = settings.race.date ? daysUntil(settings.race.date) : null;
+  const prediction = fitness?.prediction?.current ?? null;
+  const forecastFor = (sessionId: number) =>
+    weather?.sessions?.find((x) => x.sessionId === sessionId)?.forecast ?? null;
   const phaseName = next?.phaseName ?? sessions.find((s) => s.status !== "completed")?.phaseName ?? "";
 
   return (
@@ -164,6 +180,12 @@ export default function Dashboard() {
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", marginTop: 8 }}>
                 <i className="fa-regular fa-calendar" style={{ marginRight: 7 }} />
                 {dateNo(settings.race.date)}
+              </div>
+            )}
+            {prediction && (
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", marginTop: 6 }}>
+                <i className="fa-solid fa-stopwatch" style={{ marginRight: 7 }} />
+                Prognose: <b style={{ color: "rgba(255,255,255,0.85)" }} className="tnum">{timeHms(prediction.predictedSec)}</b>
               </div>
             )}
           </div>
@@ -319,9 +341,10 @@ export default function Dashboard() {
                 <div key={s.id} className="srow fadein" onClick={() => navigate(`/plan/${s.id}`)}>
                   <span className="accent" style={{ background: SESSION_COLORS[s.type] }} />
                   <div className="s-main">
-                    <div className="flex items-center gap8" style={{ marginBottom: 4 }}>
+                    <div className="flex items-center gap8 wrap" style={{ marginBottom: 4 }}>
                       <TypeBadge type={s.type} />
                       <span className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>{dateNo(s.date)}</span>
+                      <WeatherChip forecast={forecastFor(s.id)} />
                     </div>
                     <div className="s-title">{s.title}</div>
                   </div>
@@ -329,6 +352,15 @@ export default function Dashboard() {
                   <i className="fa-solid fa-chevron-right chev" />
                 </div>
               ))
+            )}
+            {weather && weather.configured === false && upcoming.length > 0 && (
+              <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+                Tips: sett hjemsted i{" "}
+                <Link to="/innstillinger" className="link">
+                  Innstillinger
+                </Link>{" "}
+                for værmelding på øktene
+              </p>
             )}
           </div>
         </div>

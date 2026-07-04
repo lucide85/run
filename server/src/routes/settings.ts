@@ -27,13 +27,14 @@ settingsRouter.get("/", ah(async (req, res) => {
     garminConnected: !!user.garminPasswordEnc,
     googleEnabled: cfg.google.enabled,
     lastSync: user.lastGarminSync,
+    home: { lat: user.homeLat, lon: user.homeLon, place: user.homePlace },
   });
 }));
 
 // Oppdater treningsdager / pulsverdier
 settingsRouter.put("/", ah(async (req, res) => {
   const user = await currentUser(req);
-  const { days, maxHr, restHr, watchModel } = req.body ?? {};
+  const { days, maxHr, restHr, watchModel, homeLat, homeLon, homePlace } = req.body ?? {};
   const data: Record<string, unknown> = {};
   let regenerate = false;
 
@@ -44,6 +45,20 @@ settingsRouter.put("/", ah(async (req, res) => {
   if (typeof maxHr === "number") data.maxHr = maxHr;
   if (typeof restHr === "number") data.restHr = restHr;
   if (typeof watchModel === "string") data.watchModel = watchModel.trim() || null;
+
+  // Hjemsted for værmelding: begge koordinater (gyldige) eller null for å fjerne
+  if (homeLat === null && homeLon === null) {
+    data.homeLat = null;
+    data.homeLon = null;
+    data.homePlace = null;
+  } else if (typeof homeLat === "number" && typeof homeLon === "number") {
+    if (homeLat < -90 || homeLat > 90 || homeLon < -180 || homeLon > 180) {
+      return res.status(400).json({ error: "Ugyldige koordinater" });
+    }
+    data.homeLat = homeLat;
+    data.homeLon = homeLon;
+    if (typeof homePlace === "string") data.homePlace = homePlace.trim() || null;
+  }
 
   await prisma.user.update({ where: { id: user.id }, data });
   if (regenerate) await regenerateDates(user.id, days);
