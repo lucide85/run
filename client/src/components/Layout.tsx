@@ -16,6 +16,7 @@ const TRENING: NavItem[] = [
   { to: "/okter", label: "Økter", icon: "fa-shoe-prints" },
   { to: "/progresjon", label: "Progresjon", icon: "fa-chart-line" },
   { to: "/kompis", label: "Kompis", icon: "fa-egg" },
+  { to: "/rekorder", label: "Rekorder", icon: "fa-trophy" },
 ];
 
 function BrandMark({ size }: { size?: number }) {

@@ -19,6 +19,11 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
   const [mfaNeeded, setMfaNeeded] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
   const [gBusy, setGBusy] = useState(false);
+  const [homePlace, setHomePlace] = useState("");
+  const [homeLat, setHomeLat] = useState("");
+  const [homeLon, setHomeLon] = useState("");
+  const [homeMsg, setHomeMsg] = useState("");
+  const [homeBusy, setHomeBusy] = useState(false);
 
   async function load() {
     const s = await api.settings();
@@ -27,6 +32,9 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
     setMaxHr(s.training.maxHr);
     setRestHr(s.training.restHr);
     setWatchModel(s.training.watchModel ?? "");
+    setHomePlace(s.home?.place ?? "");
+    setHomeLat(s.home?.lat != null ? String(s.home.lat) : "");
+    setHomeLon(s.home?.lon != null ? String(s.home.lon) : "");
   }
   useEffect(() => {
     load();
@@ -92,6 +100,57 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
       setGMsg(`Feil: ${(e as Error).message}`);
     } finally {
       setGBusy(false);
+    }
+  }
+
+  function useMyPosition() {
+    setHomeMsg("");
+    if (!navigator.geolocation) {
+      setHomeMsg("Fikk ikke tilgang til posisjon – fyll inn manuelt.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setHomeLat(String(Math.round(pos.coords.latitude * 10000) / 10000));
+        setHomeLon(String(Math.round(pos.coords.longitude * 10000) / 10000));
+      },
+      () => setHomeMsg("Fikk ikke tilgang til posisjon – fyll inn manuelt.")
+    );
+  }
+
+  async function saveHome() {
+    const lat = parseFloat(homeLat.replace(",", "."));
+    const lon = parseFloat(homeLon.replace(",", "."));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setHomeMsg("Fyll inn både breddegrad og lengdegrad.");
+      return;
+    }
+    setHomeBusy(true);
+    setHomeMsg("");
+    try {
+      await api.updateSettings({ homeLat: lat, homeLon: lon, homePlace: homePlace.trim() || null });
+      setHomeMsg("Hjemsted lagret ✓");
+      await load();
+    } catch (e) {
+      setHomeMsg(`Feil: ${(e as Error).message}`);
+    } finally {
+      setHomeBusy(false);
+      setTimeout(() => setHomeMsg(""), 5000);
+    }
+  }
+
+  async function clearHome() {
+    setHomeBusy(true);
+    setHomeMsg("");
+    try {
+      await api.updateSettings({ homeLat: null, homeLon: null, homePlace: null });
+      setHomeMsg("Hjemsted fjernet.");
+      await load();
+    } catch (e) {
+      setHomeMsg(`Feil: ${(e as Error).message}`);
+    } finally {
+      setHomeBusy(false);
+      setTimeout(() => setHomeMsg(""), 5000);
     }
   }
 
@@ -225,6 +284,75 @@ export default function SettingsPage({ onChange }: { onChange: () => void }) {
             <i className="fa-solid fa-wand-magic-sparkles" />
             Regenerer plan med AI
           </Link>
+        </div>
+      </div>
+
+      <div className="card mb18">
+        <div className="card-head">
+          <h3>Hjemsted (for værmelding)</h3>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {settings.home?.lat != null && settings.home?.lon != null
+              ? `${settings.home.place ? `${settings.home.place} · ` : ""}${settings.home.lat}, ${settings.home.lon}`
+              : "Ikke satt"}
+          </span>
+        </div>
+        <div className="card-body">
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 0, marginBottom: 14 }}>
+            Sett hvor du pleier å løpe, så viser vi værmelding fra yr på de kommende øktene dine.
+          </p>
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>Stedsnavn (valgfritt)</label>
+            <input
+              className="input"
+              value={homePlace}
+              onChange={(e) => setHomePlace(e.target.value)}
+              placeholder="F.eks. Bergen"
+            />
+          </div>
+          <div className="grid g2" style={{ marginBottom: 12 }}>
+            <div className="field">
+              <label>Breddegrad (lat)</label>
+              <input
+                className="input"
+                type="number"
+                step="0.0001"
+                value={homeLat}
+                onChange={(e) => setHomeLat(e.target.value)}
+                placeholder="60.3913"
+              />
+            </div>
+            <div className="field">
+              <label>Lengdegrad (lon)</label>
+              <input
+                className="input"
+                type="number"
+                step="0.0001"
+                value={homeLon}
+                onChange={(e) => setHomeLon(e.target.value)}
+                placeholder="5.3221"
+              />
+            </div>
+          </div>
+          <div className="flex gap8 wrap">
+            <Button variant="secondary" onClick={useMyPosition} disabled={homeBusy}>
+              <i className="fa-solid fa-location-crosshairs" />
+              Bruk min posisjon
+            </Button>
+            <Button onClick={saveHome} disabled={homeBusy || !homeLat || !homeLon}>
+              <i className={`fa-solid ${homeBusy ? "fa-arrows-rotate fa-spin" : "fa-floppy-disk"}`} />
+              Lagre hjemsted
+            </Button>
+            {settings.home?.lat != null && (
+              <Button variant="ghost" onClick={clearHome} disabled={homeBusy}>
+                Fjern
+              </Button>
+            )}
+          </div>
+          {homeMsg && (
+            <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}>
+              {homeMsg}
+            </p>
+          )}
         </div>
       </div>
 

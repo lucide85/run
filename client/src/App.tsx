@@ -14,6 +14,7 @@ import Workouts from "./pages/Workouts";
 import SettingsPage from "./pages/SettingsPage";
 import Admin from "./pages/Admin";
 import CompanionPage from "./pages/CompanionPage";
+import RecordsPage from "./pages/RecordsPage";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="/plan/:id" element={<PlanSessionDetail />} />
         <Route path="/progresjon" element={<Progress />} />
         <Route path="/kompis" element={<CompanionPage />} />
+        <Route path="/rekorder" element={<RecordsPage />} />
         <Route path="/innstillinger" element={<SettingsPage onChange={check} />} />
         <Route path="/onboarding" element={<Onboarding nickname={me?.nickname ?? ""} onDone={check} />} />
         {me?.role === "admin" && <Route path="/admin" element={<Admin />} />}

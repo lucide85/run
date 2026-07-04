@@ -5,7 +5,7 @@ import {
   Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Cell,
   Area, ComposedChart,
 } from "recharts";
-import { api, WorkoutDetail as WD, AiMessage, Settings } from "../api/client";
+import { api, WorkoutDetail as WD, AiMessage, Settings, RecordEntry } from "../api/client";
 import { Card, PageTitle, Stat, Spinner, Button, TypeBadge } from "../components/ui";
 import { dateNo, dist, duration, pace } from "../lib/format";
 import { computeZones, zoneSecondsFromStreams, ZONE_COLORS } from "../lib/zones";
@@ -51,6 +51,7 @@ export default function WorkoutDetail() {
   const [w, setW] = useState<WD | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [records, setRecords] = useState<RecordEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -67,6 +68,7 @@ export default function WorkoutDetail() {
     // Nullstill før lasting, ellers vises forrige økt mens den nye hentes
     setLoading(true);
     setW(null);
+    setRecords([]);
     setMessages([]);
     setError(null);
     setChatInput("");
@@ -77,10 +79,16 @@ export default function WorkoutDetail() {
     let alive = true; // ignorer svar som kommer etter at brukeren har navigert videre
     (async () => {
       try {
-        const [data, st] = await Promise.all([api.workout(wid), api.settings()]);
+        // Rekorder er kosmetisk pynt – feiler stille om endepunktet ikke svarer
+        const [data, st, recs] = await Promise.all([
+          api.workout(wid),
+          api.settings(),
+          api.records().catch(() => null),
+        ]);
         if (!alive) return;
         setW(data);
         setSettings(st);
+        setRecords(recs?.records ?? []);
         setMessages(data.aiMessages);
       } catch (e) {
         if (alive) setError((e as Error).message);
@@ -341,6 +349,23 @@ export default function WorkoutDetail() {
           <Link to={`/plan/${w.plannedSession.id}`} className="link" style={{ fontWeight: 700 }}>
             {w.plannedSession.title}
           </Link>
+        </div>
+      )}
+
+      {records.some((r) => r.workoutId === w.id) && (
+        <div className="flex gap8 wrap" style={{ marginBottom: 14 }}>
+          {records
+            .filter((r) => r.workoutId === w.id)
+            .map((r) => (
+              <span
+                key={r.key}
+                className="chip"
+                style={{ border: "1px solid #E5C558", background: "#FFF8E1", color: "#9A7B14", fontWeight: 700 }}
+                title="Personlig rekord satt i denne økten"
+              >
+                🏆 {r.label}
+              </span>
+            ))}
         </div>
       )}
 

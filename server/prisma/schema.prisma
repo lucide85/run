@@ -28,6 +28,11 @@ model User {
   maxHr                 Int       @default(195)
   restHr                Int       @default(50)
   watchModel            String?   // pulsklokke, f.eks. "Garmin Forerunner 255"
+
+  // Hjemsted for værmelding (yr/MET) – valgfritt, settes i Innstillinger
+  homeLat               Float?
+  homeLon               Float?
+  homePlace             String?
   raceName              String?
   raceDate              DateTime?
   trainingDaysJson      String? // JSON: ["Tue","Thu","Sun"]

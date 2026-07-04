@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, AiMessage, PlannedSession, Settings, Workout } from "../api/client";
+import { api, AiMessage, PlannedSession, Settings, Workout, WeatherForecast } from "../api/client";
 import { Card, PageTitle, Spinner, TypeBadge, StatusBadge, Button } from "../components/ui";
+import { WeatherChip } from "../components/WeatherChip";
 import { dateNo, pace, dist, duration } from "../lib/format";
 import { computeZones, ZONE_COLORS, Zone } from "../lib/zones";
 import { Markdown } from "../components/Markdown";
@@ -54,6 +55,7 @@ export default function PlanSessionDetail() {
   const [chatting, setChatting] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [forecast, setForecast] = useState<WeatherForecast | null>(null);
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
@@ -61,16 +63,19 @@ export default function PlanSessionDetail() {
   async function load() {
     setError(null);
     try {
-      const [session, st, msgs, wos] = await Promise.all([
+      const [session, st, msgs, wos, wx] = await Promise.all([
         api.session(sid),
         api.settings(),
         api.sessionMessages(sid).catch(() => [] as AiMessage[]),
         api.workouts().catch(() => [] as Workout[]),
+        // Vær er kosmetisk pynt – siden skal rendre selv om endepunktet feiler
+        api.weatherUpcoming().catch(() => null),
       ]);
       setS(session);
       setSettings(st);
       setMessages(msgs);
       setWorkouts(wos);
+      setForecast(wx?.sessions?.find((x) => x.sessionId === sid)?.forecast ?? null);
     } catch (e) {
       setError((e as Error).message);
       return;
@@ -89,6 +94,7 @@ export default function PlanSessionDetail() {
 
   useEffect(() => {
     setS(null);
+    setForecast(null);
     setTips(null);
     setTipsError("");
     setMessages([]);
@@ -264,9 +270,10 @@ export default function PlanSessionDetail() {
         }
       />
 
-      <div className="flex items-center gap8" style={{ marginBottom: 18 }}>
+      <div className="flex items-center gap8 wrap" style={{ marginBottom: 18 }}>
         <TypeBadge type={s.type} />
         <StatusBadge status={s.status} />
+        {forecast && <WeatherChip forecast={forecast} />}
         {s.aiAdjusted && (
           <span className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>
             <i className="fa-solid fa-wand-magic-sparkles" style={{ color: "var(--t-langtur)", marginRight: 5 }} />
