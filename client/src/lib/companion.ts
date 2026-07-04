@@ -9,14 +9,36 @@ import type { PlannedSession, Workout } from "../api/client";
 export type CompanionStage = 0 | 1 | 2 | 3 | 4 | 5;
 
 /**
- * Filendelse for figur-bildene i client/public/companion/.
- * Endre til "webp" når AI-genererte 3D-bilder legges inn
- * (se client/public/companion/README.md).
+ * Foretrukket bildeformat for figurene i client/public/companion/.
+ * "webp" = de AI-rendrede 3D-bildene. Finnes ikke webp-fila (ennå),
+ * faller <img> automatisk tilbake til den håndtegnede SVG-en via
+ * stageImageFallbackUrl + handleStageImageError – så appen viser alltid
+ * en figur uansett hvilke filer som ligger der.
+ * Se client/public/companion/README.md for hvordan webp-ene lages.
  */
-export const COMPANION_IMAGE_EXT = "svg";
+export const COMPANION_IMAGE_EXT = "webp";
 
+/** Primær bilde-URL (foretrukket format). */
 export function stageImageUrl(stage: CompanionStage): string {
   return `/companion/stage-${stage}.${COMPANION_IMAGE_EXT}`;
+}
+
+/** Reserve-URL: alltid den innebygde SVG-en. */
+export function stageImageFallbackUrl(stage: CompanionStage): string {
+  return `/companion/stage-${stage}.svg`;
+}
+
+/**
+ * onError-håndterer for figur-<img>: bytt til SVG-en én gang hvis webp-fila
+ * mangler. Bruk med data-stage="<steg>" på img-elementet.
+ */
+export function handleStageImageError(e: { currentTarget: HTMLImageElement }): void {
+  const img = e.currentTarget;
+  const stage = Number(img.dataset.stage) as CompanionStage;
+  const fallback = stageImageFallbackUrl(stage);
+  if (!img.src.endsWith(".svg") && Number.isFinite(stage)) {
+    img.src = fallback;
+  }
 }
 
 export interface CompanionStageInfo {

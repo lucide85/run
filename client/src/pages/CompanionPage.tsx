@@ -14,6 +14,7 @@ import {
   evolutionHistory,
   nextStageProgress,
   stageImageUrl,
+  handleStageImageError,
   streakWeeks,
 } from "../lib/companion";
 import "../components/companion.css";
@@ -87,6 +88,8 @@ export default function CompanionPage() {
       <div className="card companion-hero fadein" style={{ marginBottom: 18 }}>
         <img
           src={stageImageUrl(stage)}
+          data-stage={stage}
+          onError={handleStageImageError}
           alt={`Treningskompisen din: ${info.name}`}
           className="companion-hero-figure"
           width={220}
@@ -135,6 +138,8 @@ export default function CompanionPage() {
                 >
                   <img
                     src={stageImageUrl(s.stage)}
+                    data-stage={s.stage}
+                    onError={handleStageImageError}
                     alt={locked ? "Låst utviklingssteg" : s.name}
                     width={84}
                     height={84}

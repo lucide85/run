@@ -11,6 +11,7 @@ import {
   computeStage,
   nextStageProgress,
   stageImageUrl,
+  handleStageImageError,
   streakWeeks,
 } from "../lib/companion";
 import "./companion.css";
@@ -111,6 +112,8 @@ export function Companion({
           <div className={`companion-figure-wrap mood-${MOOD_CLASS[mood]}`}>
             <img
               src={stageImageUrl(data.stage)}
+              data-stage={data.stage}
+              onError={handleStageImageError}
               alt={`Treningskompisen din: ${info.name}`}
               className="companion-figure"
               width={130}
@@ -161,6 +164,8 @@ export function Companion({
           <div className="companion-overlay-inner">
             <img
               src={stageImageUrl(ceremonyStage)}
+              data-stage={ceremonyStage}
+              onError={handleStageImageError}
               alt=""
               className="companion-overlay-figure"
               width={180}

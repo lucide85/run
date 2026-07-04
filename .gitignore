@@ -19,3 +19,6 @@ server/prisma/data/
 .vscode/
 .idea/
 .DS_Store
+
+# Kildebilder for treningskompis-webp (genereres lokalt)
+client/scripts/companion-src/

@@ -27,11 +27,16 @@ Logikken bor i `client/src/lib/companion.ts` (`computeStage`, terskler i
 - Palett: app-turkis `#008094`-familien + varme aksenter (`#ff9f68`, krem)
 - Samme øyestil og palett på alle steg, så figuren beholder identiteten
 
-## Bytte til AI-genererte 3D-bilder (WebP)
+## AI-genererte 3D-bilder (WebP) — appen er allerede satt opp for dette
 
-Vil du erstatte SVG-ene med skikkelig 3D-renderte figurer? Slik gjør du det:
+Appen foretrekker nå `stage-<n>.webp`. **Så lenge webp-filene ikke ligger her,
+faller hvert bilde automatisk tilbake til `stage-<n>.svg`** (se
+`handleStageImageError` i `client/src/lib/companion.ts`) – ingenting blir ødelagt
+mens du jobber. Legg inn webp-ene når de er klare, så tar appen dem i bruk.
 
-### 1. Generer en oppstilling med denne prompten
+Slik lager du dem:
+
+### 1. Generer figurene med denne prompten
 
 > A character evolution lineup of 6 stages of the same adorable 3D cartoon
 > blob creature, Pixar-style render, soft studio lighting, subtle subsurface
@@ -51,21 +56,35 @@ Vil du erstatte SVG-ene med skikkelig 3D-renderte figurer? Slik gjør du det:
 > sparkles around it. Consistent character identity across all stages,
 > cute, wholesome, high quality 3D render.
 
-### 2. Beskjær og eksporter
+Tips: be modellen om **én figur per bilde** mot **ren, lys, ensfarget
+bakgrunn** (ikke oppstilling), så blir automatisk beskjæring enklere. Vil du ha
+alle seks i ett bilde, klipp dem fra hverandre først.
 
-- Beskjær hvert av de 6 stegene til sin egen kvadratiske fil
-- Fjern bakgrunnen (transparent bakgrunn er viktig – kortet bak er lyst)
-- Eksporter som WebP, gjerne ~600×600 px, og legg dem her med **samme
-  filnavn** men `.webp`-endelse: `stage-0.webp` … `stage-5.webp`
+### 2. Konverter automatisk til ferdige WebP-er
 
-### 3. Pek appen på de nye filene
+1. Legg de genererte bildene i `client/scripts/companion-src/` og gi dem navn
+   `stage-0`, `stage-1`, … `stage-5` (png/jpg/webp går fint), ett bilde per steg.
+2. Kjør konverteringen (bruker `sharp`, som allerede er installert):
 
-Åpne `client/src/lib/companion.ts` og endre konstanten:
+   ```bash
+   npm -w client run companion:webp
+   ```
 
-```ts
-export const COMPANION_IMAGE_EXT = "webp";
-```
+   Scriptet trimmer bort ensfarget kant, sentrerer figuren i et kvadrat med litt
+   luft, gjør bakgrunnen transparent og skriver `stage-<n>.webp` (~512×512) hit.
+   Steg som mangler kildebilde hoppes over – de faller tilbake til SVG-en.
+3. Bygg klienten på nytt så bildene havner i PWA-cachen:
 
-Det er alt – både oversikten, kompis-siden og utviklingsseremonien bruker
-`stageImageUrl()`, så alle bytter bilde samtidig. SVG-ene kan gjerne bli
-liggende som reserve.
+   ```bash
+   npm -w client run build
+   ```
+
+Det er alt. `COMPANION_IMAGE_EXT` står allerede på `"webp"`, og oversikten,
+kompis-siden og utviklingsseremonien bruker alle `stageImageUrl()` – så alt
+bytter bilde samtidig. SVG-ene blir liggende som reserve.
+
+> **Bakgrunnsfjerning:** `sharp` sin `.trim()` fjerner en *ensfarget* kant, men
+> gjør ikke en hvit bakgrunn *bak/rundt* figuren transparent. Genererer modellen
+> allerede transparent PNG, er alt bra. Ellers: kjør bildene gjennom en
+> bakgrunnsfjerner (f.eks. remove.bg eller Photoroom) før du legger dem i
+> `companion-src/`.
